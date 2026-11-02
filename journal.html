@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Журнал посещаемости</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&amp;family=PT+Serif:wght@700&amp;display=swap" rel="stylesheet">
+<style>
+/* Макет: синяя шапка с названием, плитки итогов, затем сам журнал
+   (ученики по строкам, дни и пары по столбцам), ниже рейтинг пропусков и заметки. */
+:root{
+  --font-body:"Onest",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-display:"PT Serif",Georgia,"Times New Roman",serif;
+  --bg:#EDF0F6;
+  --surface:#FFFFFF;
+  --ink:#172033;
+  --muted:#5A6579;
+  --line:#DCE2EC;
+  --line-strong:#9AA6BD;
+  --head:#E6ECF7;
+  --head2:#F2F5FA;
+  --brand:#25479B;
+  --band:#1E3A6E;
+  --band-ink:#FFFFFF;
+  --band-soft:rgba(255,255,255,.74);
+  --ok-bg:#D9F2E3;
+  --ok-ink:#17633B;
+  --no-bg:#D7392F;
+  --no-ink:#FFFFFF;
+  --late-bg:#FFE9A6;
+  --late-ink:#6E4A00;
+  --ex-bg:#DCE6FA;
+  --ex-ink:#2A4A92;
+  --good:#17633B;
+  --mid:#8A5A00;
+  --low:#B42318;
+  --err-bg:#FBE9E1;
+  --err-ink:#7A2A08;
+  --info-bg:#E3EAF8;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0E131C;
+    --surface:#161D2A;
+    --ink:#E4E9F2;
+    --muted:#94A1B6;
+    --line:#27314A;
+    --line-strong:#4A5878;
+    --head:#1D2740;
+    --head2:#182033;
+    --brand:#8CA8F3;
+    --band:#17274D;
+    --ok-bg:#16382A;
+    --ok-ink:#82DAA8;
+    --no-bg:#C2372D;
+    --late-bg:#4B3B0C;
+    --late-ink:#F3CF63;
+    --ex-bg:#243659;
+    --ex-ink:#A5BDF3;
+    --good:#82DAA8;
+    --mid:#F3CF63;
+    --low:#FF8F85;
+    --err-bg:#3A1D10;
+    --err-ink:#F7C4AA;
+    --info-bg:#1D2740;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:400 15px/1.45 var(--font-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:calc(16px + env(safe-area-inset-top,0px)) calc(40px + env(safe-area-inset-bottom,0px));
+}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+#dash{display:flex;flex-direction:column;gap:16px}
+h1,h2{margin:0;text-wrap:balance}
+h2{font-size:1rem;font-weight:600}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.muted{color:var(--muted)}
+
+.band{background:var(--band);color:var(--band-ink);border-radius:16px;padding:20px 22px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.eyebrow{margin:0 0 6px;font-size:.74rem;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--band-soft)}
+.band h1{font:700 clamp(1.4rem,4vw,1.9rem)/1.15 var(--font-display)}
+.band .sub{margin:6px 0 0;color:var(--band-soft);font-size:.9rem;font-variant-numeric:tabular-nums}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 16px;
+  border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:600;font-size:.9rem;
+}
+.btn:hover{border-color:var(--brand)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+@media (prefers-color-scheme:dark){.btn.primary{color:#0E131C}}
+.btn.onband{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.35);color:#fff}
+.btn.onband:hover{background:rgba(255,255,255,.22)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px 18px}
+.panel>summary{cursor:pointer;font-weight:600;padding:12px 0;list-style:none}
+.panel>summary::-webkit-details-marker{display:none}
+.panel>summary::after{content:"+";float:right;color:var(--muted);font-weight:500}
+.panel[open]>summary::after{content:"−"}
+.panel-body{display:flex;flex-direction:column;gap:12px;padding-bottom:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row input[type=url]{flex:1 1 280px;min-width:0}
+input[type=url],input[type=search],input[type=date],select{
+  min-height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);
+}
+.hint{margin:0;font-size:.85rem;color:var(--muted)}
+.hint b{color:var(--ink);font-weight:600}
+#status{margin:0;padding:10px 14px;border-radius:10px;font-size:.9rem;background:var(--info-bg)}
+#status.err{background:var(--err-bg);color:var(--err-ink)}
+.diag{margin:0;padding:10px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font:400 .78rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tl{font-size:.78rem;font-weight:600;color:var(--muted)}
+.tv{font:700 1.9rem/1.15 var(--font-display);font-variant-numeric:tabular-nums}
+.tv.good{color:var(--good)} .tv.mid{color:var(--mid)} .tv.low{color:var(--low)}
+.ts{font-size:.8rem;color:var(--muted)}
+
+.toolbar{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:3px;gap:2px;max-width:100%;overflow-x:auto}
+.seg button{border:0;background:transparent;padding:0 13px;min-height:34px;border-radius:9px;cursor:pointer;font-weight:600;font-size:.86rem;color:var(--muted);white-space:nowrap}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed=true]{background:var(--brand);color:#fff}
+@media (prefers-color-scheme:dark){.seg button[aria-pressed=true]{color:#0E131C}}
+.custom{display:flex;align-items:center;gap:8px}
+.toolbar input[type=search]{flex:1 1 190px;min-width:0;max-width:300px}
+.chk{display:inline-flex;align-items:center;gap:8px;font-size:.9rem;cursor:pointer}
+.chk input{width:18px;height:18px;accent-color:var(--brand)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;min-width:0}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;margin-bottom:12px}
+.card-head p{margin:0;font-size:.85rem}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.8rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+
+.c{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;border-radius:5px;font-weight:700;font-size:.78rem}
+.P{background:var(--ok-bg);color:var(--ok-ink)}
+.A{background:var(--no-bg);color:var(--no-ink)}
+.L{background:var(--late-bg);color:var(--late-ink)}
+.E{background:var(--ex-bg);color:var(--ex-ink)}
+
+.grid{overflow-x:auto;overflow-y:hidden;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums;font-size:.82rem;width:max-content;min-width:100%}
+.j th,.j td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:0;text-align:center}
+.j thead th{position:sticky;background:var(--head);z-index:3;font-weight:600}
+.j th.day{top:0;height:32px;padding:0 6px;white-space:nowrap;border-left:2px solid var(--line-strong)}
+.j th.pair{top:32px;height:26px;background:var(--head2);color:var(--muted);font-size:.75rem}
+.j th.ds{border-left:2px solid var(--line-strong)}
+.j .name{position:sticky;left:0;z-index:2;background:var(--surface);text-align:left;padding:7px 12px;width:200px;min-width:200px;max-width:200px;box-shadow:1px 0 0 var(--line-strong)}
+.j thead th.name{top:0;z-index:5;background:var(--head);font-size:.95rem}
+.j tbody tr:hover td.name{background:var(--head2)}
+.n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:.98rem;line-height:1.25}
+.pct{font-weight:700}
+.pct.good{color:var(--good)} .pct.mid{color:var(--mid)} .pct.low{color:var(--low)}
+.st{font-size:.76rem;color:var(--muted);margin-top:2px;white-space:nowrap}
+.j td.k{width:54px;min-width:54px;height:42px;font-weight:700;font-size:.82rem;cursor:default}
+.j td.ds{border-left:2px solid var(--line-strong)}
+.j td.k.L{font-size:.68rem}
+.j td.k.O{background:var(--head2);color:var(--muted);font-size:.68rem;font-weight:600}
+.j td.k.N{color:var(--line-strong);font-weight:400}
+.j tfoot td{background:var(--head2);height:34px;font-size:.78rem;color:var(--muted);font-weight:600}
+.j tfoot td.name{background:var(--head2)}
+.j tfoot td.hot{color:var(--low);font-weight:700}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--no-bg);margin-left:6px;vertical-align:middle}
+.empty{margin:0;padding:24px;text-align:center;color:var(--muted)}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.two>*{min-width:0}
+@media (max-width:820px){.two{grid-template-columns:1fr}}
+.rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.rank li{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 30px;gap:10px;align-items:center;font-size:.88rem}
+.rn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rn small{display:block;color:var(--muted);font-size:.72rem}
+.bar{height:10px;border-radius:5px;background:var(--head2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--no-bg);border-radius:5px}
+.rv{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.notes li{font-size:.9rem;padding-left:12px;border-left:3px solid var(--line-strong)}
+.notes b{display:block;font-size:.76rem;color:var(--muted);font-weight:600}
+.foot{margin:0;font-size:.8rem;color:var(--muted)}
+@media (max-width:560px){
+  .j .name{width:164px;min-width:164px;max-width:164px;padding:7px 9px}
+  .n{font-size:.92rem}
+  .band{padding:16px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="band">
+    <div>
+      <p class="eyebrow" id="srcLabel">Журнал</p>
+      <h1>Журнал посещаемости</h1>
+      <p class="sub" id="periodText"></p>
+    </div>
+    <button type="button" class="btn onband" id="btnRefresh" hidden="">Обновить данные</button>
+  </header>
+
+  <details class="panel" id="src" open="">
+    <summary>Источник данных</summary>
+    <div class="panel-body">
+      <form id="srcForm" class="row" autocomplete="off">
+        <input id="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" aria-label="Ссылка на Google Таблицу">
+        <button class="btn primary" type="submit">Показать</button>
+      </form>
+      <p class="hint">Первая строка таблицы — даты (ячейку даты можно объединить на все пары дня), вторая — номера пар, дальше фамилии и отметки: <b>П</b> — был, <b>Н</b> — не был, <b>«15мин»</b> — опоздал, <b>Б</b> и <b>У</b> — по уважительной причине. Текст под таблицей в столбце пары станет заметкой дня.</p>
+      <p class="hint">Доступ к таблице: <b>«Все, у кого есть ссылка, — читатели»</b>. Если не загружается, надёжнее всего <b>Файл → Поделиться → Опубликовать в интернете</b>: выберите нужный лист, формат <b>CSV</b>, и вставьте сюда полученную ссылку. Для другой вкладки откройте её и скопируйте ссылку из адресной строки.</p>
+      <div class="row">
+        <label class="btn" for="file">Открыть CSV-файл</label>
+        <input id="file" type="file" accept=".csv,.tsv,text/csv,text/plain" hidden="">
+        <button type="button" class="btn" id="btnDemo">Демо-журнал</button>
+        <button type="button" class="btn" id="btnBake" hidden="">Скачать журнал со встроенной ссылкой</button>
+      </div>
+    </div>
+  </details>
+
+  <p id="status" role="status" hidden=""></p>
+  <pre id="diag" class="diag" hidden=""></pre>
+
+  <section id="dash" hidden="">
+    <div class="tiles" id="tiles"></div>
+
+    <div class="toolbar">
+      <div class="seg" id="segPeriod" role="group" aria-label="Период">
+        <button type="button" data-v="last1">Последний день</button>
+        <button type="button" data-v="last5">5 дней</button>
+        <button type="button" data-v="last10">10 дней</button>
+        <button type="button" data-v="all">Всё время</button>
+        <button type="button" data-v="custom">Свой</button>
+      </div>
+      <div class="custom" id="customRange" hidden="">
+        <input type="date" id="from" aria-label="С даты">
+        <span class="muted">—</span>
+        <input type="date" id="to" aria-label="По дату">
+      </div>
+      <input type="search" id="q" placeholder="Поиск по фамилии" aria-label="Поиск по фамилии">
+      <select id="sort" aria-label="Сортировка">
+        <option value="sheet">Как в таблице</option>
+        <option value="abs">Больше пропусков</option>
+        <option value="late">Больше опозданий</option>
+        <option value="pct">Ниже посещаемость</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="only"> Только с пропусками</label>
+    </div>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Журнал</h2>
+        <div class="legend">
+          <span><i class="c P">П</i> был</span>
+          <span><i class="c A">Н</i> не был</span>
+          <span><i class="c L">15 мин</i> опоздал</span>
+          <span><i class="c E">Б</i> уважительная</span>
+        </div>
+      </div>
+      <div class="grid" id="grid"></div>
+      <p class="foot" id="shown" style="margin-top:10px"></p>
+    </section>
+
+    <div class="two">
+      <section class="card">
+        <div class="card-head"><h2>Рейтинг пропусков</h2><p class="muted">пар с отметкой «Н»</p></div>
+        <ul class="rank" id="rank"></ul>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Заметки</h2><p class="muted" id="notesSub"></p></div>
+        <ul class="notes" id="notes"></ul>
+      </section>
+    </div>
+    <p class="foot" id="foot"></p>
+  </section>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const S = { period: "all", from: "", to: "", q: "", sort: "sheet", only: false };
+let J = null;   // { students, cols, days, notes, label }
+let ALL = [];   // ученики со статистикой за выбранный период
+const STORE_KEY = "journal.url";
+const DEFAULT_URL = "https://docs.google.com/spreadsheets/d/1VhS4yw7wkp0CP-2VRjIIslcn4TynuuoFgAvOTNi7ab8/edit?usp=drivesdk";   // сюда подставляется ссылка, если скачать журнал со встроенной ссылкой
+const SOURCE_HTML = document.documentElement ? "<!doctype html>\n" + document.documentElement.outerHTML : "";
+
+const pad = n => String(n).padStart(2, "0");
+const dayKey = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const parseISO = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const fmtDM = d => pad(d.getDate()) + "." + pad(d.getMonth() + 1);
+const fmtFull = d => fmtDM(d) + "." + d.getFullYear();
+const fmtWd = new Intl.DateTimeFormat("ru-RU", { weekday: "short" });
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+class UserError extends Error {}
+
+/* ---------- разбор ---------- */
+function parseDate(s) {
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?$/), y, mo, d;
+  if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+  else {
+    m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})(?:[ T,].*)?$/);
+    if (!m) return null;
+    d = +m[1]; mo = +m[2]; y = +m[3];
+    if (y < 100) y += 2000;
+  }
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const dt = new Date(y, mo - 1, d);
+  return dt.getMonth() === mo - 1 ? dt : null;
+}
+function parseNum(s) {
+  s = String(s).trim();
+  if (!s) return NaN;
+  s = s.replace(/[\s  ]/g, "").replace("−", "-");
+  if (s.includes(",") && s.includes(".")) s = s.replace(/,/g, "");
+  else s = s.replace(",", ".");
+  return /^[-+]?\d+(\.\d+)?$/.test(s) ? Number(s) : NaN;
+}
+function parseCSV(text) {
+  text = text.replace(/^﻿/, "");
+  const first = text.split(/\r?\n/, 1)[0] || "";
+  const counts = { ",": 0, ";": 0, "\t": 0 };
+  let q = false;
+  for (const ch of first) { if (ch === '"') q = !q; else if (!q && ch in counts) counts[ch]++; }
+  const delim = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  const rows = []; let row = [], cell = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else inQ = false; }
+      else cell += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === delim) { row.push(cell); cell = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += ch;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+const LOOK = { h: "н", b: "б", y: "у" };   // латинские двойники кириллических букв
+function parseMark(raw) {
+  const s = String(raw).trim();
+  if (!s) return null;
+  let l = s.toLowerCase().replace(/ /g, " ");
+  if (LOOK[l]) l = LOOK[l];
+  if (l === "п" || l === "+") return { t: "P" };
+  if (l === "н") return { t: "A" };
+  if (l === "б" || l === "у") return { t: "E", raw: l.toUpperCase() };
+  const m = l.match(/^(\d+)\s*(?:мин|м)\.?$/);
+  if (m) return { t: "L", min: +m[1] };
+  return { t: "O", raw: s };
+}
+
+function ingest(text, label) {
+  const t = parseCSV(text);
+  let dr = -1;
+  for (let r = 0; r < Math.min(8, t.length); r++) {
+    let n = 0;
+    for (let c = 1; c < t[r].length; c++) if (parseDate((t[r][c] || "").trim())) n++;
+    if (n) { dr = r; break; }
+  }
+  if (dr < 0 || dr + 1 >= t.length) throw new UserError("Не нашёл строку с датами. Даты должны стоять в верхних строках, например 28.10.2026.");
+  const dateRow = t[dr], pairRow = t[dr + 1];
+  const width = Math.max(dateRow.length, pairRow.length);
+  let cols = [], days = [];
+  let cur = null;
+  for (let c = 1; c < width; c++) {
+    const v = (dateRow[c] || "").trim();
+    const pl = (pairRow[c] || "").trim();
+    const d = v ? parseDate(v) : null;
+    if (d) {
+      if (!(cur && dayKey(cur.date) === dayKey(d))) { cur = { date: d, idx: days.length, cols: [] }; days.push(cur); }
+    } else if (v && !pl) cur = null;   // подпись вроде «Итого» без номера пары закрывает день
+    if (!cur) continue;
+    const col = { c, date: cur.date, day: cur.idx, pair: pl, labeled: !!pl };
+    cur.cols.push(col); cols.push(col);
+  }
+  if (!cols.length) throw new UserError("Не нашёл столбцов под датами. Даты должны стоять в первой строке, номера пар 1, 2, 3, 4 во второй.");
+  const students = [];
+  let r = dr + 2;
+  for (; r < t.length; r++) {
+    const name = (t[r][0] || "").trim();
+    if (!name) break;
+    const marks = {};
+    let any = false;
+    for (const col of cols) {
+      const m = parseMark(t[r][col.c] || "");
+      if (m) { marks[col.c] = m; any = true; }
+    }
+    if (!any) break;
+    students.push({ name, idx: students.length, marks });
+  }
+  if (!students.length) throw new UserError("Не нашёл учеников. Фамилии должны стоять в первом столбце под строкой с номерами пар.");
+  // Столбец без номера пары не выбрасываем, если в нём есть отметки: номер выводим из соседей.
+  const used = new Set();
+  students.forEach(s => Object.keys(s.marks).forEach(k => used.add(+k)));
+  days.forEach(d => {
+    d.cols = d.cols.filter(col => col.labeled || used.has(col.c));
+    d.cols.forEach((col, i) => {
+      if (!col.pair) { const p = d.cols[i - 1]; col.pair = String(p && /^\d+$/.test(p.pair) ? +p.pair + 1 : i + 1); }
+    });
+  });
+  days = days.filter(d => d.cols.length);
+  cols = days.flatMap(d => d.cols);
+  if (!cols.length) throw new UserError("Под датами нет ни одной отметки.");
+  const names = new Set(students.map(s => s.name));
+  const notes = [], seen = new Set();
+  for (; r < t.length; r++) {
+    const row = t[r];
+    if (row.some(x => names.has((x || "").trim()))) continue;   // это сводная таблица, не заметка
+    for (const col of cols) {
+      const x = (row[col.c] || "").trim();
+      if (x && isNaN(parseNum(x))) {
+        const k = col.c + "|" + x;
+        if (!seen.has(k)) { seen.add(k); notes.push({ date: col.date, day: col.day, pair: col.pair, text: x.replace(/\s+/g, " ") }); }
+      }
+    }
+  }
+  J = { students, cols, days, notes, label };
+  $("#srcLabel").textContent = label;
+  $("#dash").hidden = false;
+  const now = new Date();
+  const cnt = {};
+  days.forEach(d => { cnt[d.cols.length] = (cnt[d.cols.length] || 0) + 1; });
+  const common = +Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
+  const odd = days.filter(d => d.cols.length !== common).map(d => fmtDM(d.date) + " (" + d.cols.length + ")");
+  $("#foot").textContent = "Данные загружены в " + pad(now.getHours()) + ":" + pad(now.getMinutes()) +
+    ". Посещаемость считается как доля пар, где ученик был (включая опоздания), среди всех пар с отметкой." +
+    (odd.length ? " Внимание: в днях " + odd.join(", ") + " найдено пар не " + common + ". Если это ошибка, проверьте даты и номера пар в двух верхних строках таблицы." : "");
+  renderAll(true);
+}
+
+/* ---------- загрузка ---------- */
+function parseSheetLink(raw) {
+  raw = raw.trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+  const gid = (raw.match(/[?&#]gid=(\d+)/) || [])[1];
+  const pub = raw.match(/\/spreadsheets\/d\/e\/([^/?#]+)/);
+  if (pub) return { kind: "pub", pubId: pub[1], gid };
+  const id = (raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) || [])[1];
+  if (id) return { kind: "sheet", id, gid };
+  if (/\.csv(\?|$)/i.test(raw)) return { kind: "csv", url: raw };
+  return null;
+}
+function candidates(L) {
+  const g = L.gid ? "&gid=" + L.gid : "";
+  if (L.kind === "csv") return [{ name: "CSV-ссылка", url: L.url }];
+  if (L.kind === "pub") return [{ name: "публикация", url: "https://docs.google.com/spreadsheets/d/e/" + L.pubId + "/pub?output=csv" + g }];
+  const b = "https://docs.google.com/spreadsheets/d/" + L.id;
+  return [
+    { name: "выгрузка CSV", url: b + "/export?format=csv" + g },
+    { name: "gviz CSV", url: b + "/gviz/tq?tqx=out:csv&headers=0" + g },
+    { name: "gviz CSV (авто)", url: b + "/gviz/tq?tqx=out:csv" + g },
+    { name: "публикация", url: b + "/pub?output=csv" + g },
+    { name: "скрипт gviz", jsonp: { id: L.id, gid: L.gid } }
+  ];
+}
+async function fetchText(url) {
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: ctl.signal });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    if (/^\s*<(!doctype|html)/i.test(text)) throw new Error("пришла страница входа вместо таблицы");
+    return text;
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("нет ответа за 15 с");
+    if (e instanceof TypeError) throw new Error("запрос заблокирован браузером (CORS или сеть)");
+    throw e;
+  } finally { clearTimeout(to); }
+}
+/* Запасной путь без CORS: Google отдаёт таблицу как скрипт, его можно подключить тегом script. */
+function scriptSheet({ id, gid }) {
+  return new Promise((resolve, reject) => {
+    const cb = "__gv" + Math.random().toString(36).slice(2);
+    const s = document.createElement("script");
+    const done = () => { clearTimeout(timer); delete window[cb]; s.remove(); };
+    const timer = setTimeout(() => { done(); reject(new Error("нет ответа за 15 с")); }, 15000);
+    window[cb] = resp => {
+      done();
+      try {
+        if (!resp || resp.status !== "ok") throw new Error((resp && resp.errors && resp.errors[0] && (resp.errors[0].detailed_message || resp.errors[0].message)) || "ошибка в ответе");
+        resolve(tableToCsv(resp.table));
+      } catch (e) { reject(e); }
+    };
+    s.onload = () => setTimeout(() => { if (window[cb]) { done(); reject(new Error("ответ не распознан, скорее всего нет доступа")); } }, 50);
+    s.onerror = () => { done(); reject(new Error("скрипт не загрузился, скорее всего нет доступа")); };
+    s.src = "https://docs.google.com/spreadsheets/d/" + id + "/gviz/tq?tqx=out:json;responseHandler:" + cb + "&headers=0" + (gid ? "&gid=" + gid : "");
+    document.head.appendChild(s);
+  });
+}
+function tableToCsv(tb) {
+  const out = [];
+  if (tb.cols.some(c => c.label && c.label.trim())) out.push(tb.cols.map(c => c.label || ""));
+  tb.rows.forEach(r => out.push((r.c || []).map(c => c ? (c.f != null ? c.f : (c.v == null ? "" : String(c.v))) : "")));
+  return out.map(r => r.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(",")).join("\n");
+}
+
+const ACCESS_MSG = "Не удалось получить таблицу. Надёжнее всего: Файл → Поделиться → Опубликовать в интернете, выберите нужный лист и формат CSV, затем вставьте сюда полученную ссылку. Либо скачайте лист как CSV и откройте кнопкой ниже.";
+function rememberUrl(url) {
+  let ok = false;
+  try { localStorage.setItem(STORE_KEY, url); ok = localStorage.getItem(STORE_KEY) === url; } catch (e) {}
+  $("#btnBake").hidden = false;
+  if (!ok) setStatus("Журнал загружен. Этот браузер не запоминает ссылку для локальных файлов: откройте «Источник данных» и нажмите «Скачать журнал со встроенной ссылкой», дальше открывайте скачанный файл.");
+}
+function downloadFile(name, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/html;charset=utf-8" }));
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function setStatus(msg, isErr) {
+  const el = $("#status");
+  el.hidden = !msg;
+  el.textContent = msg || "";
+  el.classList.toggle("err", !!isErr);
+  if (!msg) setDiag("");
+}
+function setDiag(txt) {
+  const el = $("#diag");
+  el.hidden = !txt;
+  el.textContent = txt || "";
+}
+async function loadUrl(raw) {
+  const L = parseSheetLink(raw);
+  if (!L) { const m = "Это не похоже на ссылку Google Таблицы. Скопируйте адрес из браузера."; setStatus(m, true); return m; }
+  setStatus("Загружаю журнал…");
+  const log = [];
+  let structural = "";
+  for (const c of candidates(L)) {
+    try {
+      const text = c.jsonp ? await scriptSheet(c.jsonp) : await fetchText(c.url);
+      ingest(text, "Google Таблица");
+      $("#btnRefresh").hidden = false;
+      $("#src").open = false;
+      setStatus("");
+      rememberUrl(raw.trim());
+      return null;
+    } catch (e) {
+      log.push(c.name + ": " + (e && e.message ? e.message : e));
+      if (e instanceof UserError) structural = e.message;
+    }
+  }
+  if (!/^https?:$/.test(location.protocol)) log.push("Страница открыта как локальный файл, часть браузеров ограничивает такие запросы. Выложите её на GitHub Pages или Netlify, если ничего не помогает.");
+  const m = structural ? "Таблица загрузилась, но устроена иначе, чем ждёт журнал. " + structural : ACCESS_MSG;
+  setStatus(m, true);
+  setDiag("Что пробовал:\n" + log.join("\n"));
+  return m;
+}
+
+/* ---------- демо: та же раскладка, что в таблице ---------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function demoCsv() {
+  const rnd = mulberry32(11), now = new Date();
+  let d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const wd = [];
+  while (wd.length < 10) { const w = d.getDay(); if (w !== 0 && w !== 6) wd.unshift(new Date(d)); d = addDays(d, -1); }
+  const names = ["Андреев Павел", "Белова Мария", "Васильев Артём", "Громова Ольга", "Дмитриев Кирилл", "Егорова Софья",
+    "Жуков Никита", "Зайцева Анна", "Исаев Тимур", "Козлова Дарья", "Лебедев Роман", "Миронова Елена",
+    "Никитин Глеб", "Орлова Вероника", "Попов Семён", "Рязанова Ксения"];
+  const h1 = ["Дата"], h2 = ["Фамилия | н.Пары"];
+  wd.forEach(day => { for (let p = 1; p <= 4; p++) { h1.push(p === 1 ? fmtFull(day) : ""); h2.push(String(p)); } });
+  const rows = [h1, h2], tally = {};
+  names.forEach((n, i) => {
+    const r = [n]; let a = 0;
+    const risk = i % 5 === 2 ? 0.2 : 0.04;
+    wd.forEach(() => {
+      const x = rnd(), mode = x < risk ? "abs" : x < risk + 0.03 ? "ill" : "norm";
+      for (let p = 0; p < 4; p++) {
+        let v = "П";
+        if (mode === "abs") { v = "Н"; a++; }
+        else if (mode === "ill") v = "Б";
+        else if (p === 0 && rnd() < 0.09) v = (5 + Math.floor(rnd() * 35)) + "мин";
+        else if (rnd() < 0.006) { v = "Н"; a++; }
+        r.push(v);
+      }
+    });
+    tally[n] = a; rows.push(r);
+  });
+  rows.push([]);
+  const note = new Array(1 + wd.length * 4).fill("");
+  note[1 + (wd.length - 2) * 4 + 2] = "Ушла после 2 пары по записке от родителей";
+  rows.push(note, [], []);
+  Object.keys(tally).sort((a, b) => tally[b] - tally[a]).forEach(n => rows.push(["", n, String(tally[n])]));
+  return rows.map(r => r.join(";")).join("\n");
+}
+function loadDemo() { ingest(demoCsv(), "Демо-журнал"); $("#btnRefresh").hidden = true; }
+
+/* ---------- расчёты ---------- */
+function visible() {
+  let ds = J.days;
+  if (S.period === "last1") ds = ds.slice(-1);
+  else if (S.period === "last5") ds = ds.slice(-5);
+  else if (S.period === "last10") ds = ds.slice(-10);
+  else if (S.period === "custom") {
+    const f = S.from ? parseISO(S.from) : null, t = S.to ? parseISO(S.to) : null;
+    ds = ds.filter(d => (!f || d.date >= f) && (!t || d.date <= t));
+  }
+  return { days: ds, cols: ds.flatMap(d => d.cols) };
+}
+function statFor(st, cols) {
+  let P = 0, L = 0, A = 0, E = 0, min = 0;
+  for (const col of cols) {
+    const m = st.marks[col.c];
+    if (!m) continue;
+    if (m.t === "P") P++;
+    else if (m.t === "L") { L++; min += m.min; }
+    else if (m.t === "A") A++;
+    else if (m.t === "E") E++;
+  }
+  const tot = P + L + A + E;
+  return { P, L, A, E, min, tot, pct: tot ? Math.round((P + L) / tot * 100) : null };
+}
+const pctCls = p => p == null ? "" : p >= 90 ? "good" : p >= 75 ? "mid" : "low";
+
+/* ---------- отрисовка ---------- */
+function renderAll(toEnd) {
+  const V = visible();
+  ALL = J.students.map(s => ({ s, st: statFor(s, V.cols) }));
+  renderHead(V); renderTiles(V); renderGrid(V, toEnd); renderRank(V); renderNotes(V);
+}
+
+function renderHead(V) {
+  document.querySelectorAll("#segPeriod button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === S.period));
+  $("#customRange").hidden = S.period !== "custom";
+  if (V.days.length) {
+    const a = V.days[0].date, b = V.days[V.days.length - 1].date;
+    $("#periodText").textContent = (dayKey(a) === dayKey(b) ? fmtFull(a) : fmtFull(a) + " — " + fmtFull(b)) +
+      " · дней: " + V.days.length + " · пар: " + V.cols.length + " · учеников: " + J.students.length;
+  } else $("#periodText").textContent = "В выбранном периоде нет дат";
+}
+
+function renderTiles(V) {
+  let P = 0, L = 0, A = 0, E = 0, min = 0, tot = 0, clean = 0, withAbs = 0;
+  ALL.forEach(({ st }) => {
+    P += st.P; L += st.L; A += st.A; E += st.E; min += st.min; tot += st.tot;
+    if (st.tot && st.A === 0) clean++;
+    if (st.A > 0) withAbs++;
+  });
+  const pct = tot ? Math.round((P + L) / tot * 1000) / 10 : null;
+  const cls = pct == null ? "" : pct >= 90 ? "good" : pct >= 75 ? "mid" : "low";
+  $("#tiles").innerHTML =
+    '<div class="tile"><span class="tl">Посещаемость</span><span class="tv ' + cls + '">' + (pct == null ? "—" : String(pct).replace(".", ",") + "%") +
+      '</span><span class="ts">дней: ' + V.days.length + ", пар: " + V.cols.length + "</span></div>" +
+    '<div class="tile"><span class="tl">Пропущено пар</span><span class="tv">' + A +
+      '</span><span class="ts">у ' + withAbs + " из " + J.students.length + " учеников" + (E ? ", по уважительной: " + E : "") + "</span></div>" +
+    '<div class="tile"><span class="tl">Опозданий</span><span class="tv">' + L +
+      '</span><span class="ts">суммарно ' + min + " мин</span></div>" +
+    '<div class="tile"><span class="tl">Без пропусков</span><span class="tv">' + clean +
+      '</span><span class="ts">из ' + J.students.length + " учеников</span></div>";
+}
+
+function markText(m) {
+  if (m.t === "P") return "присутствовал";
+  if (m.t === "A") return "отсутствовал";
+  if (m.t === "L") return "опоздал на " + m.min + " мин";
+  if (m.t === "E") return m.raw === "Б" ? "болел" : "уважительная причина";
+  return m.raw;
+}
+
+function renderGrid(V, toEnd) {
+  const box = $("#grid"), prev = box.scrollLeft;
+  let rows = ALL.slice();
+  const q = S.q.trim().toLowerCase();
+  if (q) rows = rows.filter(r => r.s.name.toLowerCase().includes(q));
+  if (S.only) rows = rows.filter(r => r.st.A > 0);
+  if (S.sort === "abs") rows.sort((a, b) => b.st.A - a.st.A || b.st.L - a.st.L || a.s.idx - b.s.idx);
+  else if (S.sort === "late") rows.sort((a, b) => b.st.L - a.st.L || b.st.min - a.st.min || a.s.idx - b.s.idx);
+  else if (S.sort === "pct") rows.sort((a, b) => (a.st.pct ?? 101) - (b.st.pct ?? 101) || a.s.idx - b.s.idx);
+  $("#shown").textContent = "Показано учеников: " + rows.length + " из " + J.students.length;
+  if (!V.cols.length) { box.innerHTML = '<p class="empty">В выбранном периоде нет дат.</p>'; return; }
+  if (!rows.length) { box.innerHTML = '<p class="empty">Никого не нашлось. Измените поиск или фильтр.</p>'; return; }
+
+  let h = '<table class="j"><thead><tr><th class="name" rowspan="2">Ученик</th>';
+  V.days.forEach(d => {
+    const nt = J.notes.filter(n => n.day === d.idx);
+    h += '<th class="day" colspan="' + d.cols.length + '"' + (nt.length ? ' title="' + esc(nt.map(n => n.text).join("; ")) + '"' : "") + ">" +
+      fmtWd.format(d.date) + " " + fmtDM(d.date) + (nt.length ? '<i class="dot"></i>' : "") + "</th>";
+  });
+  h += "</tr><tr>";
+  V.days.forEach(d => d.cols.forEach((c, i) => { h += '<th class="pair' + (i === 0 ? " ds" : "") + '">' + esc(c.pair) + "</th>"; }));
+  h += "</tr></thead><tbody>";
+  rows.forEach(({ s, st }) => {
+    const parts = [];
+    if (st.A) parts.push("Н " + st.A);
+    if (st.L) parts.push("опозд. " + st.L);
+    if (st.E) parts.push("увж. " + st.E);
+    h += '<tr><td class="name"><div class="n" title="' + esc(s.name) + '">' + esc(s.name) + '</div><div class="st">' +
+      (st.pct == null ? "" : '<span class="pct ' + pctCls(st.pct) + '">' + st.pct + "%</span> · ") +
+      (parts.length ? parts.join(" · ") : st.tot ? "без замечаний" : "нет отметок") + "</div></td>";
+    V.days.forEach(d => d.cols.forEach((col, i) => {
+      const m = s.marks[col.c], ds = i === 0 ? " ds" : "";
+      if (!m) { h += '<td class="k N' + ds + '">·</td>'; return; }
+      const txt = m.t === "P" ? "П" : m.t === "A" ? "Н" : m.t === "L" ? m.min + " мин" : esc(m.raw);
+      h += '<td class="k ' + m.t + ds + '" title="' + esc(s.name + " · " + fmtDM(col.date) + ", " + col.pair + " пара: " + markText(m)) + '">' + txt + "</td>";
+    }));
+    h += "</tr>";
+  });
+  h += '</tbody><tfoot><tr><td class="name">Не пришли</td>';
+  V.days.forEach(d => d.cols.forEach((col, i) => {
+    const n = rows.filter(r => r.s.marks[col.c] && r.s.marks[col.c].t === "A").length;
+    h += '<td class="' + (n ? "hot " : "") + (i === 0 ? "ds" : "") + '">' + (n || "·") + "</td>";
+  }));
+  box.innerHTML = h + "</tr></tfoot></table>";
+  box.scrollLeft = toEnd ? box.scrollWidth : prev;
+}
+
+function renderRank() {
+  const list = ALL.filter(r => r.st.tot).sort((a, b) => b.st.A - a.st.A || b.st.L - a.st.L || a.s.idx - b.s.idx);
+  const max = Math.max(...list.map(r => r.st.A), 0);
+  if (!max) { $("#rank").innerHTML = '<li class="muted" style="display:block">В выбранном периоде пропусков нет.</li>'; return; }
+  $("#rank").innerHTML = list.map(({ s, st }) =>
+    '<li><span class="rn">' + esc(s.name) + "<small>" + (st.L ? "опозданий: " + st.L + " (" + st.min + " мин)" : "без опозданий") + "</small></span>" +
+    '<span class="bar"><i style="width:' + (st.A / max * 100).toFixed(1) + '%"></i></span><span class="rv">' + st.A + "</span></li>").join("");
+}
+
+function renderNotes(V) {
+  const keep = new Set(V.days.map(d => d.idx));
+  const list = J.notes.filter(n => keep.has(n.day));
+  $("#notesSub").textContent = list.length ? "за выбранный период" : "";
+  $("#notes").innerHTML = list.length
+    ? list.map(n => "<li><b>" + fmtDM(n.date) + ", " + esc(n.pair) + " пара</b>" + esc(n.text) + "</li>").join("")
+    : '<li class="muted" style="border:0;padding:0">Заметок нет. Текст под таблицей, в столбце нужной пары, появится здесь.</li>';
+}
+
+/* ---------- события ---------- */
+$("#segPeriod").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  S.period = b.dataset.v;
+  if (S.period === "custom") {
+    const first = J.days[0].date, last = J.days[J.days.length - 1].date;
+    S.from = S.from || dayKey(first); S.to = S.to || dayKey(last);
+    $("#from").value = S.from; $("#to").value = S.to;
+  }
+  renderAll(true);
+});
+["from", "to"].forEach(id => $("#" + id).addEventListener("change", e => { S[id] = e.target.value; renderAll(true); }));
+$("#q").addEventListener("input", e => { S.q = e.target.value; renderGrid(visible(), false); });
+$("#sort").addEventListener("change", e => { S.sort = e.target.value; renderGrid(visible(), false); });
+$("#only").addEventListener("change", e => { S.only = e.target.checked; renderGrid(visible(), false); });
+$("#srcForm").addEventListener("submit", e => { e.preventDefault(); loadUrl($("#url").value); });
+$("#btnBake").addEventListener("click", () => {
+  const u = $("#url").value.trim();
+  if (!parseSheetLink(u)) { setStatus("Сначала вставьте ссылку на таблицу и нажмите «Показать».", true); return; }
+  if (!SOURCE_HTML) { setStatus("Не удалось собрать файл в этом браузере.", true); return; }
+  const lit = JSON.stringify(u).replace(/</g, "\\u003c");
+  const out = SOURCE_HTML.replace(/const DEFAULT_URL = "[^"\n]*";/, () => "const DEFAULT_URL = " + lit + ";");
+  downloadFile("journal.html", out);
+  setStatus("Скачал journal.html со встроенной ссылкой. Откройте этот файл вместо старого, ссылку вводить больше не придётся.");
+});
+$("#btnRefresh").addEventListener("click", () => { const u = $("#url").value; if (u) loadUrl(u); });
+$("#btnDemo").addEventListener("click", () => { setStatus(""); loadDemo(); });
+$("#file").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try { ingest(String(r.result), f.name); $("#btnRefresh").hidden = true; setStatus(""); $("#src").open = false; }
+    catch (err) { setStatus(err instanceof UserError ? err.message : "Не удалось прочитать файл.", true); }
+  };
+  r.readAsText(f);
+  e.target.value = "";
+});
+
+/* ---------- старт ---------- */
+(async function init() {
+  let saved = "";
+  try { saved = localStorage.getItem(STORE_KEY) || ""; } catch (e) {}
+  if (!saved) saved = DEFAULT_URL;
+  if (saved) {
+    $("#url").value = saved;
+    const err = await loadUrl(saved);
+    if (err) { loadDemo(); setStatus(err + " Пока показан демо-журнал.", true); }
+  } else {
+    loadDemo();
+    setStatus("Сейчас показан демо-журнал. Вставьте ссылку на свою таблицу, и здесь появятся ваши ученики.");
+  }
+})();
+</script></body></html>
