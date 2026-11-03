@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="ru"><head>
+<html lang="ru">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Журнал посещаемости</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
-<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&amp;family=PT+Serif:wght@700&amp;display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=PT+Serif:wght@700&display=swap" rel="stylesheet">
 <style>
 /* Макет: синяя шапка с названием, плитки итогов, затем сам журнал
    (ученики по строкам, дни и пары по столбцам), ниже рейтинг пропусков и заметки. */
@@ -30,8 +31,6 @@
   --no-ink:#FFFFFF;
   --late-bg:#FFE9A6;
   --late-ink:#6E4A00;
-  --ex-bg:#DCE6FA;
-  --ex-ink:#2A4A92;
   --good:#17633B;
   --mid:#8A5A00;
   --low:#B42318;
@@ -57,8 +56,6 @@
     --no-bg:#C2372D;
     --late-bg:#4B3B0C;
     --late-ink:#F3CF63;
-    --ex-bg:#243659;
-    --ex-ink:#A5BDF3;
     --good:#82DAA8;
     --mid:#F3CF63;
     --low:#FF8F85;
@@ -145,7 +142,6 @@ input[type=url],input[type=search],input[type=date],select{
 .P{background:var(--ok-bg);color:var(--ok-ink)}
 .A{background:var(--no-bg);color:var(--no-ink)}
 .L{background:var(--late-bg);color:var(--late-ink)}
-.E{background:var(--ex-bg);color:var(--ex-ink)}
 
 .grid{overflow-x:auto;overflow-y:hidden;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums;font-size:.82rem;width:max-content;min-width:100%}
@@ -202,31 +198,31 @@ table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-n
       <h1>Журнал посещаемости</h1>
       <p class="sub" id="periodText"></p>
     </div>
-    <button type="button" class="btn onband" id="btnRefresh" hidden="">Обновить данные</button>
+    <button type="button" class="btn onband" id="btnRefresh" hidden>Обновить данные</button>
   </header>
 
-  <details class="panel" id="src" open="">
+  <details class="panel" id="src" open>
     <summary>Источник данных</summary>
     <div class="panel-body">
       <form id="srcForm" class="row" autocomplete="off">
         <input id="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" aria-label="Ссылка на Google Таблицу">
         <button class="btn primary" type="submit">Показать</button>
       </form>
-      <p class="hint">Первая строка таблицы — даты (ячейку даты можно объединить на все пары дня), вторая — номера пар, дальше фамилии и отметки: <b>П</b> — был, <b>Н</b> — не был, <b>«15мин»</b> — опоздал, <b>Б</b> и <b>У</b> — по уважительной причине. Текст под таблицей в столбце пары станет заметкой дня.</p>
+      <p class="hint">Первая строка таблицы — даты (ячейку даты можно объединить на все пары дня), вторая — номера пар, дальше фамилии и отметки: <b>П</b> — был, <b>Н</b> — не был, <b>«15мин»</b> — опоздал. Текст под таблицей в столбце пары станет заметкой дня.</p>
       <p class="hint">Доступ к таблице: <b>«Все, у кого есть ссылка, — читатели»</b>. Если не загружается, надёжнее всего <b>Файл → Поделиться → Опубликовать в интернете</b>: выберите нужный лист, формат <b>CSV</b>, и вставьте сюда полученную ссылку. Для другой вкладки откройте её и скопируйте ссылку из адресной строки.</p>
       <div class="row">
         <label class="btn" for="file">Открыть CSV-файл</label>
-        <input id="file" type="file" accept=".csv,.tsv,text/csv,text/plain" hidden="">
+        <input id="file" type="file" accept=".csv,.tsv,text/csv,text/plain" hidden>
         <button type="button" class="btn" id="btnDemo">Демо-журнал</button>
-        <button type="button" class="btn" id="btnBake" hidden="">Скачать журнал со встроенной ссылкой</button>
+        <button type="button" class="btn" id="btnBake" hidden>Скачать журнал со встроенной ссылкой</button>
       </div>
     </div>
   </details>
 
-  <p id="status" role="status" hidden=""></p>
-  <pre id="diag" class="diag" hidden=""></pre>
+  <p id="status" role="status" hidden></p>
+  <pre id="diag" class="diag" hidden></pre>
 
-  <section id="dash" hidden="">
+  <section id="dash" hidden>
     <div class="tiles" id="tiles"></div>
 
     <div class="toolbar">
@@ -237,7 +233,7 @@ table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-n
         <button type="button" data-v="all">Всё время</button>
         <button type="button" data-v="custom">Свой</button>
       </div>
-      <div class="custom" id="customRange" hidden="">
+      <div class="custom" id="customRange" hidden>
         <input type="date" id="from" aria-label="С даты">
         <span class="muted">—</span>
         <input type="date" id="to" aria-label="По дату">
@@ -259,7 +255,6 @@ table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-n
           <span><i class="c P">П</i> был</span>
           <span><i class="c A">Н</i> не был</span>
           <span><i class="c L">15 мин</i> опоздал</span>
-          <span><i class="c E">Б</i> уважительная</span>
         </div>
       </div>
       <div class="grid" id="grid"></div>
@@ -287,7 +282,7 @@ const S = { period: "all", from: "", to: "", q: "", sort: "sheet", only: false }
 let J = null;   // { students, cols, days, notes, label }
 let ALL = [];   // ученики со статистикой за выбранный период
 const STORE_KEY = "journal.url";
-const DEFAULT_URL = "https://docs.google.com/spreadsheets/d/1VhS4yw7wkp0CP-2VRjIIslcn4TynuuoFgAvOTNi7ab8/edit?usp=drivesdk";   // сюда подставляется ссылка, если скачать журнал со встроенной ссылкой
+const DEFAULT_URL = "";   // сюда подставляется ссылка, если скачать журнал со встроенной ссылкой
 const SOURCE_HTML = document.documentElement ? "<!doctype html>\n" + document.documentElement.outerHTML : "";
 
 const pad = n => String(n).padStart(2, "0");
@@ -354,7 +349,6 @@ function parseMark(raw) {
   if (LOOK[l]) l = LOOK[l];
   if (l === "п" || l === "+") return { t: "P" };
   if (l === "н") return { t: "A" };
-  if (l === "б" || l === "у") return { t: "E", raw: l.toUpperCase() };
   const m = l.match(/^(\d+)\s*(?:мин|м)\.?$/);
   if (m) return { t: "L", min: +m[1] };
   return { t: "O", raw: s };
@@ -425,6 +419,7 @@ function ingest(text, label) {
       }
     }
   }
+  days.forEach(d => { d.filled = d.cols.some(col => students.some(s => s.marks[col.c])); });
   J = { students, cols, days, notes, label };
   $("#srcLabel").textContent = label;
   $("#dash").hidden = false;
@@ -584,11 +579,10 @@ function demoCsv() {
     const r = [n]; let a = 0;
     const risk = i % 5 === 2 ? 0.2 : 0.04;
     wd.forEach(() => {
-      const x = rnd(), mode = x < risk ? "abs" : x < risk + 0.03 ? "ill" : "norm";
+      const x = rnd(), mode = x < risk ? "abs" : "norm";
       for (let p = 0; p < 4; p++) {
         let v = "П";
         if (mode === "abs") { v = "Н"; a++; }
-        else if (mode === "ill") v = "Б";
         else if (p === 0 && rnd() < 0.09) v = (5 + Math.floor(rnd() * 35)) + "мин";
         else if (rnd() < 0.006) { v = "Н"; a++; }
         r.push(v);
@@ -608,9 +602,10 @@ function loadDemo() { ingest(demoCsv(), "Демо-журнал"); $("#btnRefresh
 /* ---------- расчёты ---------- */
 function visible() {
   let ds = J.days;
-  if (S.period === "last1") ds = ds.slice(-1);
-  else if (S.period === "last5") ds = ds.slice(-5);
-  else if (S.period === "last10") ds = ds.slice(-10);
+  const filled = ds.filter(d => d.filled);   // «последние дни» считаем по заполненным, без пустых дней в конце таблицы
+  if (S.period === "last1") ds = filled.slice(-1);
+  else if (S.period === "last5") ds = filled.slice(-5);
+  else if (S.period === "last10") ds = filled.slice(-10);
   else if (S.period === "custom") {
     const f = S.from ? parseISO(S.from) : null, t = S.to ? parseISO(S.to) : null;
     ds = ds.filter(d => (!f || d.date >= f) && (!t || d.date <= t));
@@ -618,17 +613,16 @@ function visible() {
   return { days: ds, cols: ds.flatMap(d => d.cols) };
 }
 function statFor(st, cols) {
-  let P = 0, L = 0, A = 0, E = 0, min = 0;
+  let P = 0, L = 0, A = 0, min = 0;
   for (const col of cols) {
     const m = st.marks[col.c];
     if (!m) continue;
     if (m.t === "P") P++;
     else if (m.t === "L") { L++; min += m.min; }
     else if (m.t === "A") A++;
-    else if (m.t === "E") E++;
   }
-  const tot = P + L + A + E;
-  return { P, L, A, E, min, tot, pct: tot ? Math.round((P + L) / tot * 100) : null };
+  const tot = P + L + A;
+  return { P, L, A, min, tot, pct: tot ? Math.round((P + L) / tot * 100) : null };
 }
 const pctCls = p => p == null ? "" : p >= 90 ? "good" : p >= 75 ? "mid" : "low";
 
@@ -650,9 +644,9 @@ function renderHead(V) {
 }
 
 function renderTiles(V) {
-  let P = 0, L = 0, A = 0, E = 0, min = 0, tot = 0, clean = 0, withAbs = 0;
+  let P = 0, L = 0, A = 0, min = 0, tot = 0, clean = 0, withAbs = 0;
   ALL.forEach(({ st }) => {
-    P += st.P; L += st.L; A += st.A; E += st.E; min += st.min; tot += st.tot;
+    P += st.P; L += st.L; A += st.A; min += st.min; tot += st.tot;
     if (st.tot && st.A === 0) clean++;
     if (st.A > 0) withAbs++;
   });
@@ -662,7 +656,7 @@ function renderTiles(V) {
     '<div class="tile"><span class="tl">Посещаемость</span><span class="tv ' + cls + '">' + (pct == null ? "—" : String(pct).replace(".", ",") + "%") +
       '</span><span class="ts">дней: ' + V.days.length + ", пар: " + V.cols.length + "</span></div>" +
     '<div class="tile"><span class="tl">Пропущено пар</span><span class="tv">' + A +
-      '</span><span class="ts">у ' + withAbs + " из " + J.students.length + " учеников" + (E ? ", по уважительной: " + E : "") + "</span></div>" +
+      '</span><span class="ts">у ' + withAbs + " из " + J.students.length + " учеников</span></div>" +
     '<div class="tile"><span class="tl">Опозданий</span><span class="tv">' + L +
       '</span><span class="ts">суммарно ' + min + " мин</span></div>" +
     '<div class="tile"><span class="tl">Без пропусков</span><span class="tv">' + clean +
@@ -673,7 +667,6 @@ function markText(m) {
   if (m.t === "P") return "присутствовал";
   if (m.t === "A") return "отсутствовал";
   if (m.t === "L") return "опоздал на " + m.min + " мин";
-  if (m.t === "E") return m.raw === "Б" ? "болел" : "уважительная причина";
   return m.raw;
 }
 
@@ -703,15 +696,14 @@ function renderGrid(V, toEnd) {
     const parts = [];
     if (st.A) parts.push("Н " + st.A);
     if (st.L) parts.push("опозд. " + st.L);
-    if (st.E) parts.push("увж. " + st.E);
     h += '<tr><td class="name"><div class="n" title="' + esc(s.name) + '">' + esc(s.name) + '</div><div class="st">' +
       (st.pct == null ? "" : '<span class="pct ' + pctCls(st.pct) + '">' + st.pct + "%</span> · ") +
       (parts.length ? parts.join(" · ") : st.tot ? "без замечаний" : "нет отметок") + "</div></td>";
     V.days.forEach(d => d.cols.forEach((col, i) => {
       const m = s.marks[col.c], ds = i === 0 ? " ds" : "";
-      if (!m) { h += '<td class="k N' + ds + '">·</td>'; return; }
+      if (!m) { h += '<td class="k N' + ds + '" data-d="' + d.idx + '">·</td>'; return; }
       const txt = m.t === "P" ? "П" : m.t === "A" ? "Н" : m.t === "L" ? m.min + " мин" : esc(m.raw);
-      h += '<td class="k ' + m.t + ds + '" title="' + esc(s.name + " · " + fmtDM(col.date) + ", " + col.pair + " пара: " + markText(m)) + '">' + txt + "</td>";
+      h += '<td class="k ' + m.t + ds + '" data-d="' + d.idx + '" title="' + esc(s.name + " · " + fmtDM(col.date) + ", " + col.pair + " пара: " + markText(m)) + '">' + txt + "</td>";
     }));
     h += "</tr>";
   });
@@ -721,7 +713,16 @@ function renderGrid(V, toEnd) {
     h += '<td class="' + (n ? "hot " : "") + (i === 0 ? "ds" : "") + '">' + (n || "·") + "</td>";
   }));
   box.innerHTML = h + "</tr></tfoot></table>";
-  box.scrollLeft = toEnd ? box.scrollWidth : prev;
+  if (toEnd) {
+    const lastDay = V.days.filter(d => d.filled).pop();
+    const cell = lastDay && box.querySelector('td.k[data-d="' + lastDay.idx + '"]');
+    if (cell) {
+      const nameW = box.querySelector("td.name").offsetWidth;
+      const start = cell.offsetLeft, end = [...box.querySelectorAll('td.k[data-d="' + lastDay.idx + '"]')].pop();
+      // день целиком у правого края; если не помещается, то его начало сразу за столбцом с фамилиями
+      box.scrollLeft = Math.max(0, Math.min(end.offsetLeft + end.offsetWidth - box.clientWidth, start - nameW));
+    } else box.scrollLeft = 0;
+  } else box.scrollLeft = prev;
 }
 
 function renderRank() {
@@ -796,4 +797,6 @@ $("#file").addEventListener("change", e => {
     setStatus("Сейчас показан демо-журнал. Вставьте ссылку на свою таблицу, и здесь появятся ваши ученики.");
   }
 })();
-</script></body></html>
+</script>
+</body>
+</html>
