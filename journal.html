@@ -201,24 +201,6 @@ table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-n
     <button type="button" class="btn onband" id="btnRefresh" hidden>Обновить данные</button>
   </header>
 
-  <details class="panel" id="src" open>
-    <summary>Источник данных</summary>
-    <div class="panel-body">
-      <form id="srcForm" class="row" autocomplete="off">
-        <input id="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" aria-label="Ссылка на Google Таблицу">
-        <button class="btn primary" type="submit">Показать</button>
-      </form>
-      <p class="hint">Первая строка таблицы — даты (ячейку даты можно объединить на все пары дня), вторая — номера пар, дальше фамилии и отметки: <b>П</b> — был, <b>Н</b> — не был, <b>«15мин»</b> — опоздал. Текст под таблицей в столбце пары станет заметкой дня.</p>
-      <p class="hint">Доступ к таблице: <b>«Все, у кого есть ссылка, — читатели»</b>. Если не загружается, надёжнее всего <b>Файл → Поделиться → Опубликовать в интернете</b>: выберите нужный лист, формат <b>CSV</b>, и вставьте сюда полученную ссылку. Для другой вкладки откройте её и скопируйте ссылку из адресной строки.</p>
-      <div class="row">
-        <label class="btn" for="file">Открыть CSV-файл</label>
-        <input id="file" type="file" accept=".csv,.tsv,text/csv,text/plain" hidden>
-        <button type="button" class="btn" id="btnDemo">Демо-журнал</button>
-        <button type="button" class="btn" id="btnBake" hidden>Скачать журнал со встроенной ссылкой</button>
-      </div>
-    </div>
-  </details>
-
   <p id="status" role="status" hidden></p>
   <pre id="diag" class="diag" hidden></pre>
 
@@ -281,9 +263,7 @@ const $ = s => document.querySelector(s);
 const S = { period: "all", from: "", to: "", q: "", sort: "sheet", only: false };
 let J = null;   // { students, cols, days, notes, label }
 let ALL = [];   // ученики со статистикой за выбранный период
-const STORE_KEY = "journal.url";
-const DEFAULT_URL = "";   // сюда подставляется ссылка, если скачать журнал со встроенной ссылкой
-const SOURCE_HTML = document.documentElement ? "<!doctype html>\n" + document.documentElement.outerHTML : "";
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/1VhS4yw7wkp0CP-2VRjIIslcn4TynuuoFgAvOTNi7ab8/edit?usp=drivesdk";   // ссылка на таблицу журнала, меняется только в этой строке
 
 const pad = n => String(n).padStart(2, "0");
 const dayKey = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
@@ -354,8 +334,8 @@ function parseMark(raw) {
   return { t: "O", raw: s };
 }
 
-function ingest(text, label) {
-  const t = parseCSV(text);
+function ingest(text, label) { ingestRows(parseCSV(text), label); }
+function ingestRows(t, label) {
   let dr = -1;
   for (let r = 0; r < Math.min(8, t.length); r++) {
     let n = 0;
@@ -446,17 +426,25 @@ function parseSheetLink(raw) {
   if (/\.csv(\?|$)/i.test(raw)) return { kind: "csv", url: raw };
   return null;
 }
+function colName(n) {
+  let r = "";
+  while (n > 0) { const m = (n - 1) % 26; r = String.fromCharCode(65 + m) + r; n = Math.floor((n - 1) / 26); }
+  return r;
+}
 function candidates(L) {
   const g = L.gid ? "&gid=" + L.gid : "";
-  if (L.kind === "csv") return [{ name: "CSV-ссылка", url: L.url }];
-  if (L.kind === "pub") return [{ name: "публикация", url: "https://docs.google.com/spreadsheets/d/e/" + L.pubId + "/pub?output=csv" + g }];
+  if (L.kind === "csv") return [{ name: "CSV-ссылка", typed: false, get: () => fetchText(L.url) }];
+  if (L.kind === "pub") {
+    const u = "https://docs.google.com/spreadsheets/d/e/" + L.pubId + "/pub?output=csv" + g;
+    return [{ name: "публикация", typed: false, get: () => fetchText(u) }];
+  }
   const b = "https://docs.google.com/spreadsheets/d/" + L.id;
+  const gv = rng => b + "/gviz/tq?tqx=out:csv&headers=0" + g + (rng ? "&range=" + rng : "");
   return [
-    { name: "выгрузка CSV", url: b + "/export?format=csv" + g },
-    { name: "gviz CSV", url: b + "/gviz/tq?tqx=out:csv&headers=0" + g },
-    { name: "gviz CSV (авто)", url: b + "/gviz/tq?tqx=out:csv" + g },
-    { name: "публикация", url: b + "/pub?output=csv" + g },
-    { name: "скрипт gviz", jsonp: { id: L.id, gid: L.gid } }
+    { name: "выгрузка CSV", typed: false, get: () => fetchText(b + "/export?format=csv" + g) },
+    { name: "gviz CSV", typed: true, get: rng => fetchText(gv(rng)) },
+    { name: "публикация", typed: false, get: () => fetchText(b + "/pub?output=csv" + g) },
+    { name: "скрипт gviz", typed: true, get: rng => scriptSheet({ id: L.id, gid: L.gid, range: rng }) }
   ];
 }
 async function fetchText(url) {
@@ -474,7 +462,7 @@ async function fetchText(url) {
   } finally { clearTimeout(to); }
 }
 /* Запасной путь без CORS: Google отдаёт таблицу как скрипт, его можно подключить тегом script. */
-function scriptSheet({ id, gid }) {
+function scriptSheet({ id, gid, range }) {
   return new Promise((resolve, reject) => {
     const cb = "__gv" + Math.random().toString(36).slice(2);
     const s = document.createElement("script");
@@ -489,7 +477,8 @@ function scriptSheet({ id, gid }) {
     };
     s.onload = () => setTimeout(() => { if (window[cb]) { done(); reject(new Error("ответ не распознан, скорее всего нет доступа")); } }, 50);
     s.onerror = () => { done(); reject(new Error("скрипт не загрузился, скорее всего нет доступа")); };
-    s.src = "https://docs.google.com/spreadsheets/d/" + id + "/gviz/tq?tqx=out:json;responseHandler:" + cb + "&headers=0" + (gid ? "&gid=" + gid : "");
+    s.src = "https://docs.google.com/spreadsheets/d/" + id + "/gviz/tq?tqx=out:json;responseHandler:" + cb + "&headers=0" +
+      (gid ? "&gid=" + gid : "") + (range ? "&range=" + range : "");
     document.head.appendChild(s);
   });
 }
@@ -500,22 +489,33 @@ function tableToCsv(tb) {
   return out.map(r => r.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(",")).join("\n");
 }
 
-const ACCESS_MSG = "Не удалось получить таблицу. Надёжнее всего: Файл → Поделиться → Опубликовать в интернете, выберите нужный лист и формат CSV, затем вставьте сюда полученную ссылку. Либо скачайте лист как CSV и откройте кнопкой ниже.";
-function rememberUrl(url) {
-  let ok = false;
-  try { localStorage.setItem(STORE_KEY, url); ok = localStorage.getItem(STORE_KEY) === url; } catch (e) {}
-  $("#btnBake").hidden = false;
-  if (!ok) setStatus("Журнал загружен. Этот браузер не запоминает ссылку для локальных файлов: откройте «Источник данных» и нажмите «Скачать журнал со встроенной ссылкой», дальше открывайте скачанный файл.");
+/* gviz определяет тип каждого столбца по большинству ячеек и обнуляет остальные.
+   Если под журналом стоят числа (сводка), то отметки «П» и «Н» в этом же столбце пропадают.
+   Поэтому сначала берём общую выгрузку только ради размеров, а сами данные запрашиваем по диапазонам:
+   строка дат, строка пар и блок учеников отдельно. Внутри такого диапазона смешения типов нет. */
+async function assembleTyped(get) {
+  const full = parseCSV(await get(null));
+  const W = Math.min(702, Math.max(1, ...full.map(r => r.length)));
+  let dr = -1;
+  for (let r = 0; r < Math.min(8, full.length) && dr < 0; r++)
+    for (let c = 1; c < full[r].length; c++) if (parseDate((full[r][c] || "").trim())) { dr = r; break; }
+  if (dr < 0) return { rows: full };
+  let n = 0;
+  while (dr + 2 + n < full.length && (full[dr + 2 + n][0] || "").trim()) n++;
+  if (!n) return { rows: full };
+  const first = dr + 1, last = colName(W);
+  const q = (r1, r2) => get("A" + r1 + ":" + last + r2).then(parseCSV);
+  try {
+    const [h1, h2, body] = await Promise.all([q(first, first), q(first + 1, first + 1), q(first + 2, first + 1 + n)]);
+    const rest = full.length >= first + 2 + n ? await q(first + 2 + n, full.length) : [];
+    if (h1.length !== 1 || h2.length !== 1 || body.length !== n) throw new Error("диапазон не поддержан");
+    return { rows: [h1[0], h2[0], ...body, [], ...rest] };
+  } catch (e) {
+    return { rows: full, warn: "Google отдал таблицу в упрощённом виде, отметки в некоторых столбцах могут отсутствовать. Чтобы это исправить, владельцу таблицы нужно опубликовать лист (Файл → Поделиться → Опубликовать в интернете, формат CSV) и заменить ссылку в журнале." };
+  }
 }
-function downloadFile(name, text) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([text], { type: "text/html;charset=utf-8" }));
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-}
+
+const ACCESS_MSG = "Не удалось получить таблицу. Проверьте, что доступ к ней открыт по ссылке («Все, у кого есть ссылка, — читатели»), и обновите страницу.";
 function setStatus(msg, isErr) {
   const el = $("#status");
   el.hidden = !msg;
@@ -536,12 +536,12 @@ async function loadUrl(raw) {
   let structural = "";
   for (const c of candidates(L)) {
     try {
-      const text = c.jsonp ? await scriptSheet(c.jsonp) : await fetchText(c.url);
-      ingest(text, "Google Таблица");
+      let rows, warn = "";
+      if (c.typed) { const r = await assembleTyped(c.get); rows = r.rows; warn = r.warn || ""; }
+      else rows = parseCSV(await c.get());
+      ingestRows(rows, "Google Таблица");
       $("#btnRefresh").hidden = false;
-      $("#src").open = false;
-      setStatus("");
-      rememberUrl(raw.trim());
+      setStatus(warn, !!warn);
       return null;
     } catch (e) {
       log.push(c.name + ": " + (e && e.message ? e.message : e));
@@ -554,50 +554,6 @@ async function loadUrl(raw) {
   setDiag("Что пробовал:\n" + log.join("\n"));
   return m;
 }
-
-/* ---------- демо: та же раскладка, что в таблице ---------- */
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-function demoCsv() {
-  const rnd = mulberry32(11), now = new Date();
-  let d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const wd = [];
-  while (wd.length < 10) { const w = d.getDay(); if (w !== 0 && w !== 6) wd.unshift(new Date(d)); d = addDays(d, -1); }
-  const names = ["Андреев Павел", "Белова Мария", "Васильев Артём", "Громова Ольга", "Дмитриев Кирилл", "Егорова Софья",
-    "Жуков Никита", "Зайцева Анна", "Исаев Тимур", "Козлова Дарья", "Лебедев Роман", "Миронова Елена",
-    "Никитин Глеб", "Орлова Вероника", "Попов Семён", "Рязанова Ксения"];
-  const h1 = ["Дата"], h2 = ["Фамилия | н.Пары"];
-  wd.forEach(day => { for (let p = 1; p <= 4; p++) { h1.push(p === 1 ? fmtFull(day) : ""); h2.push(String(p)); } });
-  const rows = [h1, h2], tally = {};
-  names.forEach((n, i) => {
-    const r = [n]; let a = 0;
-    const risk = i % 5 === 2 ? 0.2 : 0.04;
-    wd.forEach(() => {
-      const x = rnd(), mode = x < risk ? "abs" : "norm";
-      for (let p = 0; p < 4; p++) {
-        let v = "П";
-        if (mode === "abs") { v = "Н"; a++; }
-        else if (p === 0 && rnd() < 0.09) v = (5 + Math.floor(rnd() * 35)) + "мин";
-        else if (rnd() < 0.006) { v = "Н"; a++; }
-        r.push(v);
-      }
-    });
-    tally[n] = a; rows.push(r);
-  });
-  rows.push([]);
-  const note = new Array(1 + wd.length * 4).fill("");
-  note[1 + (wd.length - 2) * 4 + 2] = "Ушла после 2 пары по записке от родителей";
-  rows.push(note, [], []);
-  Object.keys(tally).sort((a, b) => tally[b] - tally[a]).forEach(n => rows.push(["", n, String(tally[n])]));
-  return rows.map(r => r.join(";")).join("\n");
-}
-function loadDemo() { ingest(demoCsv(), "Демо-журнал"); $("#btnRefresh").hidden = true; }
 
 /* ---------- расчёты ---------- */
 function visible() {
@@ -759,43 +715,12 @@ $("#segPeriod").addEventListener("click", e => {
 $("#q").addEventListener("input", e => { S.q = e.target.value; renderGrid(visible(), false); });
 $("#sort").addEventListener("change", e => { S.sort = e.target.value; renderGrid(visible(), false); });
 $("#only").addEventListener("change", e => { S.only = e.target.checked; renderGrid(visible(), false); });
-$("#srcForm").addEventListener("submit", e => { e.preventDefault(); loadUrl($("#url").value); });
-$("#btnBake").addEventListener("click", () => {
-  const u = $("#url").value.trim();
-  if (!parseSheetLink(u)) { setStatus("Сначала вставьте ссылку на таблицу и нажмите «Показать».", true); return; }
-  if (!SOURCE_HTML) { setStatus("Не удалось собрать файл в этом браузере.", true); return; }
-  const lit = JSON.stringify(u).replace(/</g, "\\u003c");
-  const out = SOURCE_HTML.replace(/const DEFAULT_URL = "[^"\n]*";/, () => "const DEFAULT_URL = " + lit + ";");
-  downloadFile("journal.html", out);
-  setStatus("Скачал journal.html со встроенной ссылкой. Откройте этот файл вместо старого, ссылку вводить больше не придётся.");
-});
-$("#btnRefresh").addEventListener("click", () => { const u = $("#url").value; if (u) loadUrl(u); });
-$("#btnDemo").addEventListener("click", () => { setStatus(""); loadDemo(); });
-$("#file").addEventListener("change", e => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = () => {
-    try { ingest(String(r.result), f.name); $("#btnRefresh").hidden = true; setStatus(""); $("#src").open = false; }
-    catch (err) { setStatus(err instanceof UserError ? err.message : "Не удалось прочитать файл.", true); }
-  };
-  r.readAsText(f);
-  e.target.value = "";
-});
+$("#btnRefresh").addEventListener("click", () => loadUrl(SHEET_URL));
 
 /* ---------- старт ---------- */
 (async function init() {
-  let saved = "";
-  try { saved = localStorage.getItem(STORE_KEY) || ""; } catch (e) {}
-  if (!saved) saved = DEFAULT_URL;
-  if (saved) {
-    $("#url").value = saved;
-    const err = await loadUrl(saved);
-    if (err) { loadDemo(); setStatus(err + " Пока показан демо-журнал.", true); }
-  } else {
-    loadDemo();
-    setStatus("Сейчас показан демо-журнал. Вставьте ссылку на свою таблицу, и здесь появятся ваши ученики.");
-  }
+  if (!parseSheetLink(SHEET_URL)) { setStatus("В файле не указана ссылка на таблицу.", true); return; }
+  await loadUrl(SHEET_URL);
 })();
 </script>
 </body>
