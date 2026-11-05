@@ -165,6 +165,8 @@
         <div class="stat"><small>За тап</small><b id="sPerClick">1</b></div>
         <div class="stat"><small>В секунду</small><b id="sPerSec">0</b></div>
         <div class="stat"><small>Шанс крита</small><b id="sCrit">0%</b></div>
+        <div class="stat"><small>Крит-урон</small><b id="sCritMult">×5</b></div>
+        <div class="stat"><small>Выстрелов</small><b id="sShots">1</b></div>
         <div class="stat"><small>Всего тапов</small><b id="sClicks">0</b></div>
       </div>
 
@@ -200,7 +202,9 @@ const MAX_OFFLINE_SEC = 2 * 60 * 60;     // за отсутствие даём �
 const UPGRADES = [
   { id: 'power', name: 'Сильная лапка',   desc: '+1 монета за каждый тап',        base: 10,   growth: 1.15 },
   { id: 'auto',  name: 'Автокликер',      desc: '+1 монета в секунду',            base: 50,   growth: 1.17 },
-  { id: 'crit',  name: 'Меткий удар',     desc: '+4% шанс крита (тап ×5)',        base: 250,  growth: 1.5, max: 12 },
+  { id: 'crit',  name: 'Меткий удар',     desc: '+4% шанс крита (максимум 100%)', base: 250,  growth: 1.5 },
+  { id: 'critdmg', name: 'Крит-урон',     desc: '+0.5 к множителю крита (база ×5)', base: 400, growth: 1.45 },
+  { id: 'multi', name: 'Мультивыстрел',   desc: '+1 выстрел за тап, каждый может стать критом', base: 800, growth: 1.9 },
   { id: 'farm',  name: 'Хомячья ферма',   desc: '+8 монет в секунду',             base: 600,  growth: 1.2 },
   { id: 'gold',  name: 'Золотые зубки',   desc: '+25% ко всему доходу',           base: 1500, growth: 2.1 },
 ];
@@ -270,7 +274,9 @@ function derived() {
   return {
     perClick: (1 + L.power) * mult,
     perSec: (L.auto * 1 + L.farm * 8) * mult,
-    crit: Math.min(0.04 * L.crit, 1),             // шанс крита от 0 до 1
+    crit: Math.min(0.04 * L.crit, 1),             // шанс крита от 0 до 1 (выше 100% шанс быть не может)
+    critMult: 5 + 0.5 * L.critdmg,                // во сколько раз крит сильнее обычного тапа
+    shots: 1 + L.multi,                           // сколько выстрелов делается за один тап
   };
 }
 
@@ -290,6 +296,7 @@ const $ = id => document.getElementById(id);
 const el = {
   coins: $('coins'), tap: $('tap'), zone: $('zone'), pic: $('pic'),
   perClick: $('sPerClick'), perSec: $('sPerSec'), crit: $('sCrit'), clicks: $('sClicks'),
+  critMult: $('sCritMult'), shots: $('sShots'),
   shop: $('shop'), file: $('file'), toast: $('toast'),
 };
 
@@ -318,6 +325,8 @@ function render() {
   el.perClick.textContent = fmt(d.perClick, true);
   el.perSec.textContent = fmt(d.perSec, true);
   el.crit.textContent = Math.round(d.crit * 100) + '%';
+  el.critMult.textContent = '×' + fmt(d.critMult, true);
+  el.shots.textContent = fmt(d.shots);
   el.clicks.textContent = fmt(state.clicks);
 
   UPGRADES.forEach(u => {
@@ -354,14 +363,24 @@ function toast(msg) {
 /* =====================================================
    7. ТАП ПО ХОМЯКУ
    ===================================================== */
+const MAX_FLOATS = 8;   // показываем не больше 8 цифр за тап, чтобы страница не тормозила при огромном числе выстрелов
+
 function doTap(x, y) {
   const d = derived();
-  const isCrit = Math.random() < d.crit;            // случайное число от 0 до 1 меньше шанса — значит крит
-  const gain = d.perClick * (isCrit ? 5 : 1);
-  state.coins += gain;
   state.clicks++;
 
-  spawnFloat('+' + fmt(gain, true), x, y, isCrit);
+  // Мультивыстрел: за один тап делаем несколько выстрелов, и у каждого свой бросок на крит
+  for (let i = 0; i < d.shots; i++) {
+    const isCrit = Math.random() < d.crit;          // случайное число от 0 до 1 меньше шанса — значит крит
+    const gain = d.perClick * (isCrit ? d.critMult : 1);
+    state.coins += gain;                            // монеты начисляем за каждый выстрел
+
+    if (i < MAX_FLOATS) {
+      // Цифры слегка разбрасываем в стороны и запускаем с задержкой, чтобы выстрелы читались по очереди
+      const dx = (Math.random() - 0.5) * 70, dy = (Math.random() - 0.5) * 40;
+      setTimeout(() => spawnFloat('+' + fmt(gain, true), x + dx, y + dy, isCrit), i * 60);
+    }
+  }
 
   // Короткая анимация «вдавливания» кнопки
   el.tap.classList.add('hit');
