@@ -1,0 +1,497 @@
+<title>Хомяк-кликер</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&family=Unbounded:wght@500;700&display=swap">
+<style>
+  /* Макет: слева «арена» с хомяком, справа магазин улучшений. На телефоне всё идёт в одну колонку. */
+
+  /* ---------- ТОКЕНЫ (цвета и шрифты в одном месте) ---------- */
+  :root {
+    --bg: #0e1b24;          /* фон страницы */
+    --panel: #162836;       /* карточки */
+    --panel-hi: #1d3547;    /* карточка при наведении */
+    --line: #29465b;        /* тонкие границы */
+    --fg: #e8f1f6;          /* основной текст */
+    --muted: #8fa9b9;       /* второстепенный текст */
+    --coin: #f6c445;        /* цвет монет */
+    --accent: #5fe0c4;      /* цвет акцента: кнопки, подсветка */
+    --crit: #ff8a5c;        /* цвет критического удара */
+    --font-display: "Unbounded", "Arial Black", system-ui, sans-serif;
+    --font-body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: dark;     /* игра намеренно тёмная, поэтому одна тема */
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.4;
+    /* Боковые поля не меньше 16px и не заходят под системные панели телефона */
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 20px 40px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .wrap { max-width: 1000px; margin: 0 auto; }
+
+  /* ---------- ШАПКА СО СЧЁТЧИКОМ ---------- */
+  header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
+  h1 { font-family: var(--font-display); font-size: 1.05rem; font-weight: 500; margin: 0; color: var(--muted); letter-spacing: .02em; }
+  .coins { display: flex; align-items: baseline; gap: 10px; }
+  .coins .num {
+    font-family: var(--font-display); font-weight: 700; color: var(--coin);
+    font-size: clamp(2.2rem, 9vw, 3.4rem); line-height: 1;
+    font-variant-numeric: tabular-nums;   /* цифры одной ширины, чтобы счёт не «дрожал» */
+  }
+  .coins .unit { color: var(--muted); font-weight: 700; }
+
+  /* ---------- СЕТКА ---------- */
+  .game { display: grid; gap: 20px; grid-template-columns: 1fr; }
+  .game > * { min-width: 0; }
+  @media (min-width: 820px) {
+    .game { grid-template-columns: 380px 1fr; align-items: start; }
+    .arena { position: sticky; top: 20px; }
+  }
+
+  /* ---------- АРЕНА ---------- */
+  .arena { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: grid; gap: 16px; justify-items: center; }
+
+  .tap-zone { position: relative; width: min(72vw, 300px); aspect-ratio: 1; max-width: 100%; }
+
+  /* Сама кнопка-хомяк. touch-action убирает задержку и зум при быстрых тапах */
+  .tap {
+    appearance: none; border: 0; padding: 0; cursor: pointer;
+    width: 100%; height: 100%; border-radius: 50%;
+    background: var(--panel-hi);
+    box-shadow: 0 0 0 6px var(--line), 0 14px 40px rgba(0,0,0,.45);
+    touch-action: manipulation; user-select: none; -webkit-user-select: none;
+    transition: transform .08s ease-out, box-shadow .08s ease-out;
+    overflow: hidden;
+  }
+  .tap:focus-visible { outline: 3px solid var(--accent); outline-offset: 6px; }
+  .tap.hit { transform: scale(.92); box-shadow: 0 0 0 6px var(--accent), 0 6px 20px rgba(0,0,0,.45); }
+  .tap img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
+
+  /* Всплывающие «+5» над хомяком */
+  .float {
+    position: absolute; pointer-events: none; z-index: 3;
+    font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; color: var(--coin);
+    text-shadow: 0 2px 8px rgba(0,0,0,.6);
+    transform: translate(-50%, -50%);
+    animation: floatUp .9s ease-out forwards;
+    white-space: nowrap;
+  }
+  .float.crit { color: var(--crit); font-size: 1.9rem; }
+  @keyframes floatUp {
+    from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    to   { opacity: 0; transform: translate(-50%, -190%) scale(1.15); }
+  }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+  .stat { background: var(--bg); border-radius: 12px; padding: 10px 12px; }
+  .stat small { display: block; color: var(--muted); font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  .stat b { font-family: var(--font-display); font-weight: 500; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
+  .btn {
+    appearance: none; font: inherit; font-weight: 700; font-size: .9rem; cursor: pointer;
+    color: var(--fg); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 14px;
+  }
+  .btn:hover { background: var(--panel-hi); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.danger { color: var(--crit); border-color: var(--crit); }
+  .btn.solid { background: var(--crit); color: #1a0d07; }
+  input[type="file"] { display: none; }
+
+  /* ---------- МАГАЗИН ---------- */
+  h2 { font-family: var(--font-display); font-weight: 500; font-size: 1rem; margin: 0 0 12px; color: var(--muted); }
+  .shop { display: grid; gap: 10px; }
+
+  .item {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; text-align: left;
+    width: 100%; font: inherit; color: var(--fg);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; cursor: pointer;
+    transition: background .15s, border-color .15s, opacity .15s;
+  }
+  .item:hover:not(:disabled) { background: var(--panel-hi); border-color: var(--accent); }
+  .item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .item:disabled { opacity: .5; cursor: not-allowed; }
+  .item .name { font-weight: 800; font-size: 1.05rem; }
+  .item .lvl { color: var(--accent); font-weight: 800; font-size: .85rem; margin-left: 6px; }
+  .item .desc { grid-column: 1; color: var(--muted); font-size: .9rem; }
+  .item .cost { grid-row: 1 / span 2; grid-column: 2; font-family: var(--font-display); font-weight: 500; color: var(--coin); font-size: .95rem; font-variant-numeric: tabular-nums; }
+  .item.maxed .cost { color: var(--accent); }
+
+  /* ---------- УВЕДОМЛЕНИЕ ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+    transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    background: var(--accent); color: #06231d; font-weight: 800; border-radius: 999px; padding: 10px 18px;
+    max-width: calc(100vw - 32px); text-align: center;
+    transition: opacity .25s, transform .25s;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tap, .toast, .item { transition: none; }
+    .float { animation-duration: .01s; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Хомяк-кликер</h1>
+    <div class="coins" aria-live="off">
+      <span class="num" id="coins">0</span>
+      <span class="unit">монет</span>
+    </div>
+  </header>
+
+  <main class="game">
+    <!-- Левая часть: хомяк, статистика, кнопки -->
+    <section class="arena">
+      <div class="tap-zone" id="zone">
+        <button class="tap" id="tap" aria-label="Тапнуть по хомяку, чтобы получить монеты">
+          <img id="pic" alt="Хомяк">
+        </button>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><small>За тап</small><b id="sPerClick">1</b></div>
+        <div class="stat"><small>В секунду</small><b id="sPerSec">0</b></div>
+        <div class="stat"><small>Шанс крита</small><b id="sCrit">0%</b></div>
+        <div class="stat"><small>Всего тапов</small><b id="sClicks">0</b></div>
+      </div>
+
+      <div class="tools">
+        <label class="btn" for="file" tabindex="0" id="uploadBtn">Своё фото</label>
+        <input type="file" id="file" accept="image/*">
+        <button class="btn" id="defaultPic" type="button">Вернуть хомяка</button>
+        <span id="resetBox">
+          <button class="btn danger" id="reset" type="button">Сбросить игру</button>
+        </span>
+      </div>
+    </section>
+
+    <!-- Правая часть: магазин улучшений -->
+    <section>
+      <h2>Улучшения</h2>
+      <div class="shop" id="shop"></div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* =====================================================
+   1. НАСТРОЙКИ ИГРЫ
+   Здесь описаны все улучшения. Чтобы добавить новое, достаточно
+   добавить ещё один объект в этот массив и учесть его в функции derived().
+   ===================================================== */
+const SAVE_KEY = 'hamster-clicker-v1';   // под этим именем прогресс лежит в браузере
+const MAX_OFFLINE_SEC = 2 * 60 * 60;     // за отсутствие даём доход максимум за 2 часа
+
+const UPGRADES = [
+  { id: 'power', name: 'Сильная лапка',   desc: '+1 монета за каждый тап',        base: 10,   growth: 1.15 },
+  { id: 'auto',  name: 'Автокликер',      desc: '+1 монета в секунду',            base: 50,   growth: 1.17 },
+  { id: 'crit',  name: 'Меткий удар',     desc: '+4% шанс крита (тап ×5)',        base: 250,  growth: 1.5, max: 12 },
+  { id: 'farm',  name: 'Хомячья ферма',   desc: '+8 монет в секунду',             base: 600,  growth: 1.2 },
+  { id: 'gold',  name: 'Золотые зубки',   desc: '+25% ко всему доходу',           base: 1500, growth: 2.1 },
+];
+
+/* Картинка хомяка по умолчанию нарисована прямо в коде (SVG),
+   поэтому никаких внешних файлов не нужно. */
+const DEFAULT_PIC = 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#bfe9dd"/>
+  <circle cx="52" cy="52" r="22" fill="#d89a5b"/><circle cx="52" cy="52" r="12" fill="#f3b9b0"/>
+  <circle cx="148" cy="52" r="22" fill="#d89a5b"/><circle cx="148" cy="52" r="12" fill="#f3b9b0"/>
+  <ellipse cx="100" cy="112" rx="74" ry="66" fill="#e8aa68"/>
+  <ellipse cx="100" cy="138" rx="46" ry="34" fill="#fbe7c6"/>
+  <ellipse cx="46" cy="124" rx="20" ry="16" fill="#f3b9b0" opacity=".7"/>
+  <ellipse cx="154" cy="124" rx="20" ry="16" fill="#f3b9b0" opacity=".7"/>
+  <circle cx="74" cy="96" r="9" fill="#2a1a12"/><circle cx="126" cy="96" r="9" fill="#2a1a12"/>
+  <circle cx="77" cy="93" r="3" fill="#fff"/><circle cx="129" cy="93" r="3" fill="#fff"/>
+  <ellipse cx="100" cy="114" rx="8" ry="6" fill="#c9667a"/>
+  <path d="M100 120 v8 M100 128 q-8 8 -16 2 M100 128 q8 8 16 2" stroke="#7a4a2e" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <rect x="92" y="130" width="7" height="11" rx="2" fill="#fff"/><rect x="101" y="130" width="7" height="11" rx="2" fill="#fff"/>
+</svg>`);
+
+/* =====================================================
+   2. СОСТОЯНИЕ ИГРЫ
+   Всё, что нужно сохранять, лежит в одном объекте state.
+   ===================================================== */
+function freshState() {
+  const levels = {};
+  UPGRADES.forEach(u => levels[u.id] = 0);
+  return { coins: 0, clicks: 0, levels, photo: null, lastSeen: Date.now() };
+}
+let state = freshState();
+
+/* =====================================================
+   3. СОХРАНЕНИЕ И ЗАГРУЗКА
+   Используем localStorage вместо cookie: он вмещает до нескольких МБ
+   (в cookie только ~4 КБ, фото туда не влезет).
+   try/catch нужен, потому что браузер может запретить хранилище.
+   ===================================================== */
+function save() {
+  try {
+    state.lastSeen = Date.now();
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  } catch (e) { /* хранилище недоступно, игра просто не сохранится */ }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    // Объединяем с пустым состоянием: если в будущем добавим новое улучшение, старые сохранения не сломаются
+    state = { ...freshState(), ...saved, levels: { ...freshState().levels, ...saved.levels } };
+  } catch (e) { state = freshState(); }
+}
+
+/* =====================================================
+   4. РАСЧЁТЫ
+   ===================================================== */
+// Цена следующего уровня: база × рост^уровень (экспоненциальный рост, как в большинстве кликеров)
+function costOf(u) { return Math.floor(u.base * Math.pow(u.growth, state.levels[u.id])); }
+
+// Все итоговые числа считаем из уровней, поэтому их не нужно хранить в сохранении
+function derived() {
+  const L = state.levels;
+  const mult = 1 + 0.25 * L.gold;                 // множитель от «Золотых зубков»
+  return {
+    perClick: (1 + L.power) * mult,
+    perSec: (L.auto * 1 + L.farm * 8) * mult,
+    crit: Math.min(0.04 * L.crit, 1),             // шанс крита от 0 до 1
+  };
+}
+
+// Красивый вывод чисел: 1500 → 1.50К, 2 300 000 → 2.30М
+const UNITS = ['', 'К', 'М', 'Б', 'Т'];
+function fmt(n, decimals) {
+  let i = 0;
+  while (n >= 1000 && i < UNITS.length - 1) { n /= 1000; i++; }
+  if (i === 0) return decimals ? String(Math.round(n * 10) / 10) : String(Math.floor(n));
+  return (n < 10 ? n.toFixed(2) : n < 100 ? n.toFixed(1) : String(Math.floor(n))) + UNITS[i];
+}
+
+/* =====================================================
+   5. ССЫЛКИ НА ЭЛЕМЕНТЫ СТРАНИЦЫ
+   ===================================================== */
+const $ = id => document.getElementById(id);
+const el = {
+  coins: $('coins'), tap: $('tap'), zone: $('zone'), pic: $('pic'),
+  perClick: $('sPerClick'), perSec: $('sPerSec'), crit: $('sCrit'), clicks: $('sClicks'),
+  shop: $('shop'), file: $('file'), toast: $('toast'),
+};
+
+/* =====================================================
+   6. ОТРИСОВКА
+   ===================================================== */
+// Магазин строим один раз, дальше только обновляем цифры (так кнопки не мигают)
+function buildShop() {
+  el.shop.innerHTML = '';
+  UPGRADES.forEach(u => {
+    const b = document.createElement('button');
+    b.className = 'item';
+    b.type = 'button';
+    b.dataset.id = u.id;
+    b.innerHTML = `
+      <span class="name">${u.name}<span class="lvl"></span></span>
+      <span class="cost"></span>
+      <span class="desc">${u.desc}</span>`;
+    el.shop.appendChild(b);
+  });
+}
+
+function render() {
+  const d = derived();
+  el.coins.textContent = fmt(state.coins);
+  el.perClick.textContent = fmt(d.perClick, true);
+  el.perSec.textContent = fmt(d.perSec, true);
+  el.crit.textContent = Math.round(d.crit * 100) + '%';
+  el.clicks.textContent = fmt(state.clicks);
+
+  UPGRADES.forEach(u => {
+    const b = el.shop.querySelector(`[data-id="${u.id}"]`);
+    const lvl = state.levels[u.id];
+    const maxed = u.max !== undefined && lvl >= u.max;
+    b.querySelector('.lvl').textContent = lvl ? ' ур. ' + lvl : '';
+    b.querySelector('.cost').textContent = maxed ? 'МАКС' : fmt(costOf(u));
+    b.classList.toggle('maxed', maxed);
+    // Кнопка неактивна, если денег не хватает или уровень максимальный
+    b.disabled = maxed || state.coins < costOf(u);
+  });
+}
+
+// Всплывающая цифра над местом тапа
+function spawnFloat(text, x, y, isCrit) {
+  const f = document.createElement('div');
+  f.className = 'float' + (isCrit ? ' crit' : '');
+  f.textContent = text;
+  f.style.left = x + 'px';
+  f.style.top = y + 'px';
+  el.zone.appendChild(f);
+  f.addEventListener('animationend', () => f.remove());   // убираем элемент, когда анимация закончилась
+}
+
+let toastTimer;
+function toast(msg) {
+  el.toast.textContent = msg;
+  el.toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.toast.classList.remove('show'), 3200);
+}
+
+/* =====================================================
+   7. ТАП ПО ХОМЯКУ
+   ===================================================== */
+function doTap(x, y) {
+  const d = derived();
+  const isCrit = Math.random() < d.crit;            // случайное число от 0 до 1 меньше шанса — значит крит
+  const gain = d.perClick * (isCrit ? 5 : 1);
+  state.coins += gain;
+  state.clicks++;
+
+  spawnFloat('+' + fmt(gain, true), x, y, isCrit);
+
+  // Короткая анимация «вдавливания» кнопки
+  el.tap.classList.add('hit');
+  setTimeout(() => el.tap.classList.remove('hit'), 90);
+
+  render();
+}
+
+// pointerdown срабатывает сразу при касании (быстрее, чем click) и работает и на мышке, и на телефоне
+el.tap.addEventListener('pointerdown', e => {
+  const r = el.zone.getBoundingClientRect();         // координаты зоны, чтобы поставить цифру в точку тапа
+  doTap(e.clientX - r.left, e.clientY - r.top);
+});
+// Для клавиатуры (Пробел или Enter), чтобы игра была доступна без мыши
+el.tap.addEventListener('keydown', e => {
+  if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
+    e.preventDefault();
+    doTap(el.zone.clientWidth / 2, el.zone.clientHeight / 2);
+  }
+});
+
+/* =====================================================
+   8. ПОКУПКА УЛУЧШЕНИЙ
+   Один обработчик на весь магазин (делегирование событий):
+   ищем, по какой кнопке кликнули, и берём её data-id.
+   ===================================================== */
+el.shop.addEventListener('click', e => {
+  const b = e.target.closest('.item');
+  if (!b) return;
+  const u = UPGRADES.find(x => x.id === b.dataset.id);
+  const price = costOf(u);
+  if (state.coins < price) return;
+  if (u.max !== undefined && state.levels[u.id] >= u.max) return;
+  state.coins -= price;
+  state.levels[u.id]++;
+  render();
+  save();
+});
+
+/* =====================================================
+   9. СВОЯ КАРТИНКА
+   Читаем файл, уменьшаем до 320×320 через canvas (чтобы сохранение
+   не раздулось) и кладём в состояние как текстовую строку data:URL.
+   ===================================================== */
+function setPhoto(src) { el.pic.src = src || DEFAULT_PIC; }
+
+el.file.addEventListener('change', () => {
+  const file = el.file.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const S = 320;
+      const c = document.createElement('canvas');
+      c.width = c.height = S;
+      const ctx = c.getContext('2d');
+      // Обрезаем фото до квадрата по центру, чтобы оно красиво легло в круг
+      const side = Math.min(img.width, img.height);
+      const sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, S, S);
+      state.photo = c.toDataURL('image/jpeg', 0.85);
+      setPhoto(state.photo);
+      save();
+      toast('Фото загружено');
+    };
+    img.onerror = () => toast('Не удалось открыть это изображение');
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+  el.file.value = '';        // сбрасываем, чтобы можно было выбрать тот же файл ещё раз
+});
+// Метка-кнопка открывается и с клавиатуры
+$('uploadBtn').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.file.click(); }
+});
+$('defaultPic').addEventListener('click', () => { state.photo = null; setPhoto(null); save(); });
+
+/* =====================================================
+   10. СБРОС ИГРЫ
+   Системные окна подтверждения (confirm) здесь не работают,
+   поэтому подтверждение сделано кнопками прямо на странице.
+   ===================================================== */
+const resetBox = $('resetBox');
+function showResetButton() {
+  resetBox.innerHTML = '<button class="btn danger" id="reset" type="button">Сбросить игру</button>';
+  $('reset').addEventListener('click', showConfirm);
+}
+function showConfirm() {
+  resetBox.innerHTML = '<button class="btn solid" id="yes" type="button">Да, всё стереть</button> <button class="btn" id="no" type="button">Отмена</button>';
+  $('yes').addEventListener('click', () => {
+    state = freshState();
+    setPhoto(null);
+    render(); save(); showResetButton();
+    toast('Игра сброшена');
+  });
+  $('no').addEventListener('click', showResetButton);
+}
+$('reset').addEventListener('click', showConfirm);
+
+/* =====================================================
+   11. ИГРОВОЙ ЦИКЛ
+   Каждые 100 мс начисляем монеты от автокликера (за секунду это 10 порций),
+   так счётчик меняется плавно. Сохраняем раз в 5 секунд и при уходе со страницы.
+   ===================================================== */
+setInterval(() => {
+  const d = derived();
+  if (d.perSec > 0) { state.coins += d.perSec / 10; render(); }
+}, 100);
+
+setInterval(save, 5000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+window.addEventListener('pagehide', save);
+
+/* =====================================================
+   12. ЗАПУСК
+   ===================================================== */
+load();
+buildShop();
+setPhoto(state.photo);
+
+// Доход за время, пока игрока не было (не больше MAX_OFFLINE_SEC)
+(function offlineIncome() {
+  const away = Math.min((Date.now() - state.lastSeen) / 1000, MAX_OFFLINE_SEC);
+  const gain = derived().perSec * away;
+  if (away > 30 && gain >= 1) {
+    state.coins += gain;
+    toast('Пока тебя не было, хомяки заработали ' + fmt(gain) + ' монет');
+  }
+})();
+
+render();
+</script>
