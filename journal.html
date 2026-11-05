@@ -399,7 +399,8 @@ function ingestRows(t, label) {
       }
     }
   }
-  days.forEach(d => { d.filled = d.cols.some(col => students.some(s => s.marks[col.c])); });
+  cols.forEach(col => { col.filled = students.some(s => s.marks[col.c]); });   // пара заполнена, если есть хоть одна отметка
+  days.forEach(d => { d.filled = d.cols.some(col => col.filled); });
   J = { students, cols, days, notes, label };
   $("#srcLabel").textContent = label;
   $("#dash").hidden = false;
@@ -592,11 +593,12 @@ function renderAll(toEnd) {
 function renderHead(V) {
   document.querySelectorAll("#segPeriod button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === S.period));
   $("#customRange").hidden = S.period !== "custom";
-  if (V.days.length) {
-    const a = V.days[0].date, b = V.days[V.days.length - 1].date;
+  const fd = V.days.filter(d => d.filled), fc = V.cols.filter(c => c.filled);   // считаем только дни и пары с отметками
+  if (fd.length) {
+    const a = fd[0].date, b = fd[fd.length - 1].date;
     $("#periodText").textContent = (dayKey(a) === dayKey(b) ? fmtFull(a) : fmtFull(a) + " — " + fmtFull(b)) +
-      " · дней: " + V.days.length + " · пар: " + V.cols.length + " · учеников: " + J.students.length;
-  } else $("#periodText").textContent = "В выбранном периоде нет дат";
+      " · дней: " + fd.length + " · пар: " + fc.length + " · учеников: " + J.students.length;
+  } else $("#periodText").textContent = "В выбранном периоде нет отметок";
 }
 
 function renderTiles(V) {
@@ -610,7 +612,7 @@ function renderTiles(V) {
   const cls = pct == null ? "" : pct >= 90 ? "good" : pct >= 75 ? "mid" : "low";
   $("#tiles").innerHTML =
     '<div class="tile"><span class="tl">Посещаемость</span><span class="tv ' + cls + '">' + (pct == null ? "—" : String(pct).replace(".", ",") + "%") +
-      '</span><span class="ts">дней: ' + V.days.length + ", пар: " + V.cols.length + "</span></div>" +
+      '</span><span class="ts">дней: ' + V.days.filter(d => d.filled).length + ", пар: " + V.cols.filter(c => c.filled).length + "</span></div>" +
     '<div class="tile"><span class="tl">Пропущено пар</span><span class="tv">' + A +
       '</span><span class="ts">у ' + withAbs + " из " + J.students.length + " учеников</span></div>" +
     '<div class="tile"><span class="tl">Опозданий</span><span class="tv">' + L +
