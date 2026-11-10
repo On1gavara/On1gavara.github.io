@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Домашка</title>
+<style>
+/* ===== СТИЛИ =====
+   Цвета заданы переменными в :root, чтобы менять их в одном месте.
+   Они совпадают с журналом посещаемости, поэтому страницы выглядят как одна семья. */
+:root{
+  --bg:#EDF0F6; --surface:#FFFFFF; --ink:#172033; --muted:#5A6579;
+  --line:#DCE2EC; --brand:#25479B; --band:#1E3A6E; --err-bg:#FBE9E1; --err-ink:#7A2A08; --info-bg:#E3EAF8;
+  color-scheme:light;
+}
+/* Если у человека включена тёмная тема, подменяем цвета */
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0E131C; --surface:#161D2A; --ink:#E4E9F2; --muted:#94A1B6;
+    --line:#27314A; --brand:#8CA8F3; --band:#17274D; --err-bg:#3A1D10; --err-ink:#F7C4AA; --info-bg:#1D2740;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}            /* ширина считается вместе с рамкой и отступами, так проще верстать */
+[hidden]{display:none!important}    /* атрибут hidden должен реально прятать элемент */
+body{margin:0;padding:16px 16px 40px;background:var(--bg);color:var(--ink);
+     font:400 15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+
+/* Синяя шапка */
+.band{background:var(--band);color:#fff;border-radius:16px;padding:20px 22px;
+      display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.band h1{margin:0;font-size:1.7rem}
+.band p{margin:6px 0 0;opacity:.75;font-size:.9rem}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 16px;
+     border-radius:10px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.14);
+     color:#fff;font:600 .9rem inherit;text-decoration:none;cursor:pointer}
+.btn:hover{background:rgba(255,255,255,.24)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Статус загрузки и ошибки */
+#status{margin:0;padding:10px 14px;border-radius:10px;background:var(--info-bg)}
+#status.err{background:var(--err-bg);color:var(--err-ink)}
+
+/* Панель поиска и фильтра */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap}
+.toolbar input,.toolbar select{min-height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line);
+     background:var(--surface);color:var(--ink);font:inherit}
+.toolbar input{flex:1 1 200px;min-width:0}
+
+/* Карточка одного дня */
+.day{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.day h2{margin:0 0 10px;font-size:1.05rem;color:var(--brand)}
+/* Одно задание внутри дня */
+.task{padding:12px 0;border-top:1px solid var(--line)}
+.task:first-of-type{border-top:0;padding-top:0}
+.subj{font-weight:700}
+.text{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere} /* pre-wrap сохраняет переносы строк из ячейки */
+/* Сетка фотографий: сколько влезет по ширине, минимум 140px на фото */
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:10px}
+.photos img{width:100%;height:140px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+.empty{text-align:center;color:var(--muted);padding:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="band">
+    <div>
+      <h1>Домашка</h1>
+      <p id="sub"></p>
+    </div>
+    <div class="actions">
+      <!-- Обычная ссылка на страницу журнала. Если файл назовёшь иначе, поменяй href -->
+      <a class="btn" href="journal.html">← К журналу</a>
+      <button class="btn" id="btnRefresh" type="button">Обновить</button>
+    </div>
+  </header>
+
+  <p id="status" hidden></p>
+
+  <div class="toolbar" id="toolbar" hidden>
+    <input type="search" id="q" placeholder="Поиск по заданию">
+    <select id="subject"><option value="">Все предметы</option></select>
+  </div>
+
+  <!-- Сюда JavaScript вставит карточки с домашкой -->
+  <div id="list" class="wrap" style="gap:12px"></div>
+</div>
+
+<script>
+"use strict"; // строгий режим: JavaScript ругается на глупые ошибки вместо того, чтобы молчать
+
+/* ===== НАСТРОЙКИ =====
+   Меняешь только эти две строки. */
+const SHEET_URL  = "https://docs.google.com/spreadsheets/d/1VhS4yw7wkp0CP-2VRjIIslcn4TynuuoFgAvOTNi7ab8/edit?usp=drivesdk"; // та же таблица, что в журнале
+const SHEET_NAME = "Домашка"; // название вкладки ДОМАШКИ, буква в букву
+
+/* ===== МЕЛКИЕ ПОМОЩНИКИ ===== */
+
+// Короткая запись вместо document.querySelector
+const $ = s => document.querySelector(s);
+
+// Защита от «вредных» символов. Если в ячейке будет <script>, он не выполнится, а покажется текстом.
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// Добавляет ведущий ноль: 5 -> "05"
+const pad = n => String(n).padStart(2, "0");
+
+// Превращает текст "10.11.2026" или "2026-11-10" в настоящую дату. Не вышло -> null.
+function parseDate(s) {
+  s = s.trim();
+  let d, m, y, r;
+  if ((r = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) { y = +r[1]; m = +r[2]; d = +r[3]; }       // формат 2026-11-10
+  else if ((r = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})/))) {                        // формат 10.11.2026
+    d = +r[1]; m = +r[2]; y = +r[3]; if (y < 100) y += 2000;
+  } else return null;
+  const dt = new Date(y, m - 1, d); // в JS месяцы считаются с нуля, поэтому m - 1
+  return dt.getMonth() === m - 1 ? dt : null; // проверка: нет ли «32 октября»
+}
+
+// Красивый заголовок дня: "вторник, 10.11.2026"
+const fmtDay = d => new Intl.DateTimeFormat("ru-RU", { weekday: "long" }).format(d) +
+                    ", " + pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear();
+
+/* ===== ФОТО С GOOGLE DRIVE ===== */
+
+// В ячейке может быть несколько ссылок через пробел, запятую или с новой строки.
+// Эта функция вытаскивает их все в список.
+const findLinks = s => (s.match(/https?:\/\/[^\s,;]+/g) || []);
+
+// Обычная ссылка Drive (.../file/d/ID/view) не годится для <img>.
+// Достаём ID и собираем ссылку на превью, её браузер показывает как картинку.
+function toImg(url) {
+  const m = url.match(/\/d\/([^/?#]+)/) || url.match(/[?&]id=([^&#]+)/);
+  return m ? "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w1000" : url;
+}
+
+/* ===== ЧТЕНИЕ CSV (текст таблицы) ===== */
+
+// Разбирает CSV в массив строк, каждая строка это массив ячеек.
+// Кавычки нужны, потому что внутри ячейки могут быть запятые и переводы строк.
+function parseCSV(text) {
+  const rows = []; let row = [], cell = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {                                   // мы внутри кавычек
+      if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else inQ = false; } // "" это одна кавычка
+      else cell += ch;
+    } else if (ch === '"') inQ = true;           // кавычки открылись
+    else if (ch === ",") { row.push(cell); cell = ""; }       // запятая = следующая ячейка
+    else if (ch === "\n" || ch === "\r") {                    // перевод строки = следующая строка
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += ch;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+/* ===== ЗАГРУЗКА ЛИСТА ПО НАЗВАНИЮ ===== */
+
+// ID таблицы лежит в ссылке между "/d/" и следующим "/"
+const SHEET_ID = (SHEET_URL.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) || [])[1];
+
+// Способ 1: обычный запрос fetch. Параметр sheet= выбирает вкладку по имени.
+async function viaFetch() {
+  const url = "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
+              "/gviz/tq?tqx=out:csv&headers=0&sheet=" + encodeURIComponent(SHEET_NAME);
+  const res = await fetch(url, { cache: "no-store" }); // no-store: всегда свежие данные, не из кэша
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const text = await res.text();
+  if (/^\s*<(!doctype|html)/i.test(text)) throw new Error("нет доступа к таблице");
+  return parseCSV(text);
+}
+
+// Способ 2 (запасной): Google отдаёт таблицу как скрипт, его можно подключить тегом <script>.
+// Это обходит ограничения браузера (CORS), если первый способ не сработал.
+function viaScript() {
+  return new Promise((resolve, reject) => {
+    const cb = "__hw" + Math.random().toString(36).slice(2); // уникальное имя функции-приёмника
+    const s = document.createElement("script");
+    const timer = setTimeout(() => { cleanup(); reject(new Error("нет ответа за 15 с")); }, 15000);
+    const cleanup = () => { clearTimeout(timer); delete window[cb]; s.remove(); };
+    window[cb] = resp => {                       // Google вызовет эту функцию и передаст в неё данные
+      cleanup();
+      if (!resp || resp.status !== "ok") return reject(new Error("Google вернул ошибку (проверь название листа)"));
+      // Превращаем ответ в такой же массив строк, как у CSV. f = текст как в ячейке, v = сырое значение.
+      resolve(resp.table.rows.map(r => (r.c || []).map(c => c ? (c.f != null ? c.f : (c.v == null ? "" : String(c.v))) : "")));
+    };
+    s.onerror = () => { cleanup(); reject(new Error("скрипт не загрузился")); };
+    s.src = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:json;responseHandler:" + cb +
+            "&headers=0&sheet=" + encodeURIComponent(SHEET_NAME);
+    document.head.appendChild(s);
+  });
+}
+
+/* ===== ДАННЫЕ И ОТРИСОВКА ===== */
+let TASKS = []; // сюда сложим все задания: { date, dateText, subject, text, photos[] }
+
+// Превращает строки таблицы в удобные объекты
+function toTasks(rows) {
+  return rows
+    .filter(r => (r[0] || "").trim().toLowerCase() !== "дата")        // пропускаем строку-шапку
+    .filter(r => r.some(c => (c || "").trim()))                       // пропускаем совсем пустые строки
+    .map(r => ({
+      date: parseDate(r[0] || ""),                                    // настоящая дата (или null)
+      dateText: (r[0] || "").trim(),                                  // исходный текст даты
+      subject: (r[1] || "").trim(),
+      text: (r[2] || "").trim(),
+      photos: findLinks(r[3] || "")                                   // список ссылок на фото
+    }));
+}
+
+// Рисует список по текущим поиску и фильтру
+function render() {
+  const q = $("#q").value.trim().toLowerCase();
+  const subj = $("#subject").value;
+  // Оставляем только подходящие задания
+  const list = TASKS.filter(t => (!subj || t.subject === subj) &&
+                                 (!q || (t.text + " " + t.subject).toLowerCase().includes(q)));
+  // Группируем по дням: ключ = дата, значение = задания этого дня
+  const groups = new Map();
+  for (const t of list) {
+    const key = t.date ? t.date.getTime() : "x" + t.dateText; // у даты берём число-метку времени
+    if (!groups.has(key)) groups.set(key, { date: t.date, title: t.date ? fmtDay(t.date) : (t.dateText || "Без даты"), items: [] });
+    groups.get(key).items.push(t);
+  }
+  // Свежие дни наверху; дни без даты уходят вниз
+  const days = [...groups.values()].sort((a, b) => (b.date ? b.date.getTime() : -1) - (a.date ? a.date.getTime() : -1));
+
+  if (!days.length) { $("#list").innerHTML = '<p class="empty">Ничего не найдено.</p>'; return; }
+
+  // Собираем HTML-текст всех карточек и вставляем одним махом
+  $("#list").innerHTML = days.map(d =>
+    '<section class="day"><h2>' + esc(d.title) + "</h2>" +
+    d.items.map(t =>
+      '<div class="task"><div class="subj">' + esc(t.subject || "Без предмета") + "</div>" +
+      (t.text ? '<p class="text">' + esc(t.text) + "</p>" : "") +
+      (t.photos.length
+        ? '<div class="photos">' + t.photos.map(u =>
+            // Клик по превью открывает оригинальное фото в новой вкладке
+            '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img loading="lazy" src="' + esc(toImg(u)) + '" alt="Фото к заданию"></a>'
+          ).join("") + "</div>"
+        : "") +
+      "</div>"
+    ).join("") + "</section>"
+  ).join("");
+}
+
+// Заполняет выпадающий список предметов тем, что нашлось в таблице
+function fillSubjects() {
+  const subs = [...new Set(TASKS.map(t => t.subject).filter(Boolean))].sort(); // Set убирает повторы
+  $("#subject").innerHTML = '<option value="">Все предметы</option>' + subs.map(s => '<option>' + esc(s) + "</option>").join("");
+}
+
+function setStatus(msg, isErr) {
+  const el = $("#status");
+  el.hidden = !msg; el.textContent = msg || ""; el.classList.toggle("err", !!isErr);
+}
+
+// Главная функция: загрузить таблицу и показать
+async function load() {
+  setStatus("Загружаю домашку…");
+  let rows, errs = [];
+  try { rows = await viaFetch(); }                         // пробуем способ 1
+  catch (e) { errs.push(e.message); try { rows = await viaScript(); } catch (e2) { errs.push(e2.message); } } // не вышло -> способ 2
+  if (!rows) {
+    setStatus("Не удалось загрузить лист «" + SHEET_NAME + "». Проверь название вкладки и доступ по ссылке. (" + errs.join("; ") + ")", true);
+    return;
+  }
+  TASKS = toTasks(rows);
+  setStatus("");
+  $("#toolbar").hidden = false;
+  $("#sub").textContent = "Заданий: " + TASKS.length;
+  fillSubjects();
+  render();
+}
+
+/* ===== СОБЫТИЯ: что делать, когда человек что-то нажал ===== */
+$("#q").addEventListener("input", render);            // печатает в поиске -> перерисовать
+$("#subject").addEventListener("change", render);     // выбрал предмет -> перерисовать
+$("#btnRefresh").addEventListener("click", load);     // нажал «Обновить» -> загрузить заново
+
+load(); // запуск при открытии страницы
+</script>
+</body>
+</html>
