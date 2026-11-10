@@ -94,6 +94,7 @@ body{margin:0;padding:16px 16px 40px;background:var(--bg);color:var(--ink);
    Меняешь только эти две строки. */
 const SHEET_URL  = "https://docs.google.com/spreadsheets/d/1VhS4yw7wkp0CP-2VRjIIslcn4TynuuoFgAvOTNi7ab8/edit?usp=drivesdk"; // та же таблица, что в журнале
 const SHEET_NAME = "Домашка"; // название вкладки ДОМАШКИ, буква в букву
+const SHEET_GID  = "1918681184"; // номер вкладки (виден в адресе таблицы после gid=). Нужен для самого надёжного способа загрузки
 
 /* ===== МЕЛКИЕ ПОМОЩНИКИ ===== */
 
@@ -162,7 +163,19 @@ function parseCSV(text) {
 // ID таблицы лежит в ссылке между "/d/" и следующим "/"
 const SHEET_ID = (SHEET_URL.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) || [])[1];
 
-// Способ 1: обычный запрос fetch. Параметр sheet= выбирает вкладку по имени.
+// Способ 1 (самый надёжный): прямая выгрузка вкладки в CSV по её номеру (gid).
+// Все ячейки приходят как обычный текст. Способы 2 и 3 (gviz) пытаются угадать тип столбца
+// и могут «обнулять» ячейки, которые не подходят под угаданный тип, из-за этого строки терялись.
+async function viaExport() {
+  const url = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/export?format=csv&gid=" + SHEET_GID;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const text = await res.text();
+  if (/^\s*<(!doctype|html)/i.test(text)) throw new Error("нет доступа к таблице");
+  return parseCSV(text);
+}
+
+// Способ 2: запрос gviz. Параметр sheet= выбирает вкладку по имени.
 async function viaFetch() {
   const url = "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
               "/gviz/tq?tqx=out:csv&headers=0&sheet=" + encodeURIComponent(SHEET_NAME);
@@ -262,8 +275,11 @@ function setStatus(msg, isErr) {
 async function load() {
   setStatus("Загружаю домашку…");
   let rows, errs = [];
-  try { rows = await viaFetch(); }                         // пробуем способ 1
-  catch (e) { errs.push(e.message); try { rows = await viaScript(); } catch (e2) { errs.push(e2.message); } } // не вышло -> способ 2
+  // Пробуем способы по очереди: если один не сработал, берём следующий
+  for (const [name, fn] of [["выгрузка", viaExport], ["gviz", viaFetch], ["скрипт", viaScript]]) {
+    try { rows = await fn(); break; }                      // получилось -> выходим из цикла
+    catch (e) { errs.push(name + ": " + e.message); }      // не вышло -> запоминаем причину и идём дальше
+  }
   if (!rows) {
     setStatus("Не удалось загрузить лист «" + SHEET_NAME + "». Проверь название вкладки и доступ по ссылке. (" + errs.join("; ") + ")", true);
     return;
