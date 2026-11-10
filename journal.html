@@ -198,7 +198,11 @@ table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-n
       <h1>Журнал посещаемости</h1>
       <p class="sub" id="periodText"></p>
     </div>
-    <button type="button" class="btn onband" id="btnRefresh" hidden>Обновить данные</button>
+    <!-- Две кнопки в одном блоке: переход на домашку и обновление данных -->
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+  <a class="btn onband" href="homework.html" style="text-decoration:none">Домашка</a>
+  <button type="button" class="btn onband" id="btnRefresh" hidden>Обновить данные</button>
+</div>
   </header>
 
   <p id="status" role="status" hidden></p>
