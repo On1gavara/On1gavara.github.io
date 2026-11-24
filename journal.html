@@ -31,6 +31,8 @@
   --no-ink:#FFFFFF;
   --late-bg:#FFE9A6;
   --late-ink:#6E4A00;
+  --ex-bg:#CDEBFB;   /* УП: нежно-голубой фон */
+  --ex-ink:#0B5A86;  /* УП: тёмно-голубой текст, хорошо читается на светлом фоне */
   --good:#17633B;
   --mid:#8A5A00;
   --low:#B42318;
@@ -56,6 +58,8 @@
     --no-bg:#C2372D;
     --late-bg:#4B3B0C;
     --late-ink:#F3CF63;
+    --ex-bg:#174560;   /* УП в тёмной теме: приглушённый голубой фон */
+    --ex-ink:#8ADBFF;  /* УП в тёмной теме: светлый голубой текст */
     --good:#82DAA8;
     --mid:#F3CF63;
     --low:#FF8F85;
@@ -92,6 +96,7 @@ button,input,select{font:inherit;color:inherit}
   border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:600;font-size:.9rem;
 }
 .btn:hover{border-color:var(--brand)}
+
 .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
 @media (prefers-color-scheme:dark){.btn.primary{color:#0E131C}}
 .btn.onband{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.35);color:#fff}
@@ -142,6 +147,7 @@ input[type=url],input[type=search],input[type=date],select{
 .P{background:var(--ok-bg);color:var(--ok-ink)}
 .A{background:var(--no-bg);color:var(--no-ink)}
 .L{background:var(--late-bg);color:var(--late-ink)}
+.E{background:var(--ex-bg);color:var(--ex-ink)}   /* E = excused, уважительная причина */
 
 .grid{overflow-x:auto;overflow-y:hidden;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums;font-size:.82rem;width:max-content;min-width:100%}
@@ -198,7 +204,7 @@ table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-n
       <h1>Журнал посещаемости</h1>
       <p class="sub" id="periodText"></p>
     </div>
-    <!-- Две кнопки в одном блоке: переход на домашку и обновление данных -->
+<!-- Две кнопки в одном блоке: переход на домашку и обновление данных -->
 <div style="display:flex;gap:8px;flex-wrap:wrap">
   <a class="btn onband" href="homework.html" style="text-decoration:none">Домашка</a>
   <button type="button" class="btn onband" id="btnRefresh" hidden>Обновить данные</button>
@@ -241,6 +247,7 @@ table.j{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-n
           <span><i class="c P">П</i> был</span>
           <span><i class="c A">Н</i> не был</span>
           <span><i class="c L">15 мин</i> опоздал</span>
+          <span><i class="c E">УП</i> уважительная причина</span>
         </div>
       </div>
       <div class="grid" id="grid"></div>
@@ -333,6 +340,9 @@ function parseMark(raw) {
   if (LOOK[l]) l = LOOK[l];
   if (l === "п" || l === "+") return { t: "P" };
   if (l === "н") return { t: "A" };
+  // «УП» = уважительная причина. Допускаем варианты: «уп», «у.п.», «у п» и латинские двойники «yп», «yn».
+  // Регулярка: буква у (или y), необязательные точка/пробел, буква п (или n), необязательная точка.
+  if (/^[уy]\s*\.?\s*[пn]\.?$/.test(l)) return { t: "E", raw: "УП" };
   const m = l.match(/^(\d+)\s*(?:мин|м)\.?$/);
   if (m) return { t: "L", min: +m[1] };
   return { t: "O", raw: s };
@@ -414,7 +424,7 @@ function ingestRows(t, label) {
   const common = +Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
   const odd = days.filter(d => d.cols.length !== common).map(d => fmtDM(d.date) + " (" + d.cols.length + ")");
   $("#foot").textContent = "Данные загружены в " + pad(now.getHours()) + ":" + pad(now.getMinutes()) +
-    ". Посещаемость считается как доля пар, где ученик был (включая опоздания), среди всех пар с отметкой." +
+    ". Посещаемость считается как доля пар, где ученик был (включая опоздания), среди пар с отметкой. Пары с УП в расчёт не входят." +
     (odd.length ? " Внимание: в днях " + odd.join(", ") + " найдено пар не " + common + ". Если это ошибка, проверьте даты и номера пар в двух верхних строках таблицы." : "");
   renderAll(true);
 }
@@ -574,16 +584,20 @@ function visible() {
   return { days: ds, cols: ds.flatMap(d => d.cols) };
 }
 function statFor(st, cols) {
-  let P = 0, L = 0, A = 0, min = 0;
+  // P — был, L — опоздал, A — прогул (Н), E — уважительная причина (УП), min — минуты опозданий
+  let P = 0, L = 0, A = 0, E = 0, min = 0;
   for (const col of cols) {
     const m = st.marks[col.c];
     if (!m) continue;
     if (m.t === "P") P++;
     else if (m.t === "L") { L++; min += m.min; }
     else if (m.t === "A") A++;
+    else if (m.t === "E") E++;   // УП: ни «был», ни прогул, поэтому в процент не входит
   }
+  // tot — пары, по которым считаем процент. Пары с УП сюда НЕ попадают,
+  // иначе уважительная причина снижала бы посещаемость, как прогул.
   const tot = P + L + A;
-  return { P, L, A, min, tot, pct: tot ? Math.round((P + L) / tot * 100) : null };
+  return { P, L, A, E, min, tot, pct: tot ? Math.round((P + L) / tot * 100) : null };
 }
 const pctCls = p => p == null ? "" : p >= 90 ? "good" : p >= 75 ? "mid" : "low";
 
@@ -606,9 +620,9 @@ function renderHead(V) {
 }
 
 function renderTiles(V) {
-  let P = 0, L = 0, A = 0, min = 0, tot = 0, clean = 0, withAbs = 0;
+  let P = 0, L = 0, A = 0, E = 0, min = 0, tot = 0, clean = 0, withAbs = 0;
   ALL.forEach(({ st }) => {
-    P += st.P; L += st.L; A += st.A; min += st.min; tot += st.tot;
+    P += st.P; L += st.L; A += st.A; E += st.E; min += st.min; tot += st.tot;
     if (st.tot && st.A === 0) clean++;
     if (st.A > 0) withAbs++;
   });
@@ -618,7 +632,8 @@ function renderTiles(V) {
     '<div class="tile"><span class="tl">Посещаемость</span><span class="tv ' + cls + '">' + (pct == null ? "—" : String(pct).replace(".", ",") + "%") +
       '</span><span class="ts">дней: ' + V.days.filter(d => d.filled).length + ", пар: " + V.cols.filter(c => c.filled).length + "</span></div>" +
     '<div class="tile"><span class="tl">Пропущено пар</span><span class="tv">' + A +
-      '</span><span class="ts">у ' + withAbs + " из " + J.students.length + " учеников</span></div>" +
+      '</span><span class="ts">у ' + withAbs + " из " + J.students.length + " учеников" +
+      (E ? ", по УП: " + E : "") + "</span></div>" +
     '<div class="tile"><span class="tl">Опозданий</span><span class="tv">' + L +
       '</span><span class="ts">суммарно ' + min + " мин</span></div>" +
     '<div class="tile"><span class="tl">Без пропусков</span><span class="tv">' + clean +
@@ -629,6 +644,7 @@ function markText(m) {
   if (m.t === "P") return "присутствовал";
   if (m.t === "A") return "отсутствовал";
   if (m.t === "L") return "опоздал на " + m.min + " мин";
+  if (m.t === "E") return "уважительная причина (не считается прогулом)";
   return m.raw;
 }
 
@@ -658,6 +674,7 @@ function renderGrid(V, toEnd) {
     const parts = [];
     if (st.A) parts.push("Н " + st.A);
     if (st.L) parts.push("опозд. " + st.L);
+    if (st.E) parts.push("УП " + st.E);   // сколько пар закрыто уважительной причиной
     h += '<tr><td class="name"><div class="n" title="' + esc(s.name) + '">' + esc(s.name) + '</div><div class="st">' +
       (st.pct == null ? "" : '<span class="pct ' + pctCls(st.pct) + '">' + st.pct + "%</span> · ") +
       (parts.length ? parts.join(" · ") : st.tot ? "без замечаний" : "нет отметок") + "</div></td>";
